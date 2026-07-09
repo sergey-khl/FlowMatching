@@ -1,24 +1,32 @@
-name: wam_banana
+name: wam_reach_solo_cup
 
-task_name: wam_banana
+task_name: wam_reach_solo_cup
+
+image_shape: &image_shape [3, 84, 84]
 
 shape_meta: &shape_meta
   # acceptable types: rgb, low_dim
   obs:
-    point_cloud:
-      shape: [4096, 3]
-      type: point_cloud
+    # point_cloud:
+    #   shape: [4096, 3]
+    #   type: point_cloud
+    front_image:
+        shape: *image_shape
+        type: rgb
+    wrist_image:
+        shape: *image_shape
+        type: rgb
     agent_pos:
-      shape: [7]
+      shape: [8]
       type: low_dimx
   action:
-    shape: [6]
+    shape: [7]
 
 env_runner: null
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset
-  zarr_path: data/banana_wam_unwrapped.zarr
+  zarr_path: data_wam/reach_solo_cup.zarr
   horizon: ${horizon}
   pad_before: ${eval:'${n_obs_steps}-1'}
   pad_after: ${eval:'${n_action_steps}-1'}
