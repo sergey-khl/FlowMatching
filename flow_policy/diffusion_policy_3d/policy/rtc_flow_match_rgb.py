@@ -82,13 +82,18 @@ class RTCFlowMatchingRGB(BasePolicy):
         self.use_depth = use_depth
         self.use_depth_only = use_depth_only
         obs_encoder: TimmObsEncoder = obs_encoder
+
+        self.rgb_keys = obs_encoder.rgb_keys
+        self.low_dim_keys = obs_encoder.low_dim_keys
         
         # create diffusion model
         if use_depth and not use_depth_only:
-            obs_shape_meta['img']['shape'][0] = 4 # 3,H,W -> 4,H,W
+            for key in self.rgb_keys:
+                obs_shape_meta[key]['shape'][0] = 4 # 3,H,W -> 4,H,W
         
         if use_depth and use_depth_only:
-            obs_shape_meta['img']['shape'][0] = 1
+            for key in self.rgb_keys:
+                obs_shape_meta[key]['shape'][0] = 1
 
 
         obs_feature_dim = np.prod(obs_encoder.output_shape())
@@ -219,18 +224,18 @@ class RTCFlowMatchingRGB(BasePolicy):
         """
         # normalize input
         nobs = self.normalizer.normalize(obs_dict)
-        nobs['img'] /= 255.0
-        if nobs['img'].shape[-1] == 3:
-            if len(nobs['img'].shape) == 5:
-                nobs['img'] = nobs['img'].permute(0, 1, 4, 2, 3)
-            if len(nobs['img'].shape) == 4:
-                nobs['img'] = nobs['img'].permute(0, 3, 1, 2)
-        if self.use_depth and not self.use_depth_only:
-            nobs['img'] = torch.cat([nobs['img'], nobs['depth'].unsqueeze(-3)], dim=-3)
-        if self.use_depth and self.use_depth_only:
-            nobs['img'] = nobs['depth'].unsqueeze(-3)
+        for key in self.rgb_keys:
+            nobs[key] /= 255.0
+            if nobs[key].shape[-1] == 3:
+                if len(nobs[key].shape) == 5:
+                    nobs[key] = nobs[key].permute(0, 1, 4, 2, 3)
+                if len(nobs[key].shape) == 4:
+                    nobs[key] = nobs[key].permute(0, 3, 1, 2)
+            if self.use_depth and not self.use_depth_only:
+                nobs[key] = torch.cat([nobs[key], nobs['depth'].unsqueeze(-3)], dim=-3)
+            if self.use_depth and self.use_depth_only:
+                nobs[key] = nobs['depth'].unsqueeze(-3)
 
-        # print(nobs)
 
         value = next(iter(nobs.values()))
         B, To = value.shape[:2]
@@ -326,16 +331,17 @@ class RTCFlowMatchingRGB(BasePolicy):
         nobs = self.normalizer.normalize(batch["obs"])
         nactions = self.normalizer["action"].normalize(batch["action"])
 
-        nobs['img'] /= 255.0
-        if nobs['img'].shape[-1] == 3:
-            if len(nobs['img'].shape) == 5:
-                nobs['img'] = nobs['img'].permute(0, 1, 4, 2, 3)
-            if len(nobs['img'].shape) == 4:
-                nobs['img'] = nobs['img'].permute(0, 3, 1, 2)
-        if self.use_depth and not self.use_depth_only:
-            nobs['img'] = torch.cat([nobs['img'], nobs['depth'].unsqueeze(-3)], dim=-3)
-        if self.use_depth and self.use_depth_only:
-            nobs['img'] = nobs['depth'].unsqueeze(-3)
+        for key in self.rgb_keys:
+            nobs[key] /= 255.0
+            if nobs[key].shape[-1] == 3:
+                if len(nobs[key].shape) == 5:
+                    nobs[key] = nobs[key].permute(0, 1, 4, 2, 3)
+                if len(nobs[key].shape) == 4:
+                    nobs[key] = nobs[key].permute(0, 3, 1, 2)
+            if self.use_depth and not self.use_depth_only:
+                nobs[key] = torch.cat([nobs[key], nobs['depth'].unsqueeze(-3)], dim=-3)
+            if self.use_depth and self.use_depth_only:
+                nobs[key] = nobs['depth'].unsqueeze(-3)
 
         batch_size = nactions.shape[0]
         horizon = nactions.shape[1]

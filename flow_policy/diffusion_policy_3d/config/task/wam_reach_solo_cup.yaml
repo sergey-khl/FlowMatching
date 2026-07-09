@@ -7,13 +7,10 @@ image_shape: &image_shape [3, 84, 84]
 shape_meta: &shape_meta
   # acceptable types: rgb, low_dim
   obs:
-    # point_cloud:
-    #   shape: [4096, 3]
-    #   type: point_cloud
-    front_image:
+    front_img:
         shape: *image_shape
         type: rgb
-    wrist_image:
+    wrist_img:
         shape: *image_shape
         type: rgb
     agent_pos:

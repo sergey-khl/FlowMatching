@@ -26,8 +26,8 @@ class LabRealDataset(BaseDataset):
         val_ratio=0.0,
         max_train_episodes=None,
         task_name=None,
-        has_images=False,
-        has_pointclouds=True,
+        has_images=True,
+        has_pointclouds=False,
         weighted=False,
         num_points=4096,
     ):
@@ -45,10 +45,13 @@ class LabRealDataset(BaseDataset):
             "action",
         ]
 
+        self.img_keys = ["front_img", "wrist_img"]
+
         if self.has_pointclouds:
             buffer_keys.append("point_cloud")
         if self.has_images:
-            buffer_keys.append("img")
+            for key in self.img_keys:
+                buffer_keys.append(key)
         if self.weighted:
             buffer_keys.append("traj_weight")
 
@@ -94,7 +97,8 @@ class LabRealDataset(BaseDataset):
             normalizer["point_cloud"] = SingleFieldLinearNormalizer.create_identity()
             
         if self.has_images:
-            normalizer["img"] = SingleFieldLinearNormalizer.create_identity()
+            for key in self.img_keys:
+                normalizer[key] = SingleFieldLinearNormalizer.create_identity()
             
         if self.weighted:
             normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
@@ -120,9 +124,10 @@ class LabRealDataset(BaseDataset):
             data["obs"]["point_cloud"] = point_cloud
         
         if self.has_images:
-            img = sample["img"][:,].astype(np.float32)  # (T, H, W, C)
-            img = np.transpose(img, (0, 3, 1, 2))  # Reshape to (T, C, H, W)
-            data["obs"]["img"] = img
+            for key in self.img_keys:
+                img = sample[key][:,].astype(np.float32)  # (T, H, W, C)
+                img = np.transpose(img, (0, 3, 1, 2))  # Reshape to (T, C, H, W)
+                data["obs"][key] = img
             
         if self.weighted:
             weights = sample['traj_weight'][:,].astype(np.float32)

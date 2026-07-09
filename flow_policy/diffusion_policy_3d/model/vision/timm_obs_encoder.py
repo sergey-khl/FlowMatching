@@ -2,7 +2,6 @@ import copy
 import logging
 import math
 
-import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -55,6 +54,7 @@ class TimmObsEncoder(ModuleAttrMixin):
             model_name: str,
             pretrained: bool,
             frozen: bool,
+            n_obs_steps: 2,
             global_pool: str,
             transforms: list,
             # replace BatchNorm with GroupNorm
@@ -80,6 +80,8 @@ class TimmObsEncoder(ModuleAttrMixin):
         key_model_map = nn.ModuleDict()
         key_transform_map = nn.ModuleDict()
         key_shape_map = dict()
+
+        self.n_obs_steps = n_obs_steps
 
         assert global_pool == ''
         
@@ -307,7 +309,7 @@ class TimmObsEncoder(ModuleAttrMixin):
         for key, attr in obs_shape_meta.items():
             shape = tuple(attr['shape'])
             this_obs = torch.zeros(
-                (1, attr['horizon']) + shape, 
+                (1, self.n_obs_steps) + shape, 
                 dtype=self.dtype,
                 device=self.device)
             example_obs_dict[key] = this_obs

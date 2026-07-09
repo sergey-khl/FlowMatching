@@ -13,8 +13,8 @@ from scipy.spatial.transform import Rotation as R
 
 USING_JOINTS = False
 
-POS_THRESHOLD = 0.0015
-ROT_THRESHOLD = 0.0005
+POS_THRESHOLD = 0.0005
+ROT_THRESHOLD = 0.0002
 
 GRIPPER_ACTION_THRESHOLD = -0.01
  
@@ -193,6 +193,10 @@ if __name__ == "__main__":
     if has_images:
         front_img_arrays = np.stack(front_img_arrays, axis=0)
         wrist_img_arrays = np.stack(wrist_img_arrays, axis=0)
+        if front_img_arrays.shape[1] == 3:  # make channel last
+            front_img_arrays = np.transpose(front_img_arrays, (0, 2, 3, 1))
+        if wrist_img_arrays.shape[1] == 3:  # make channel last
+            wrist_img_arrays = np.transpose(wrist_img_arrays, (0, 2, 3, 1))
             
     if has_pointclouds:
         point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
@@ -233,7 +237,7 @@ if __name__ == "__main__":
     
     if has_images:
         zarr_data.create_dataset(
-            "img",
+            "front_img",
             data=front_img_arrays,
             chunks=front_img_chunk_size,
             dtype="uint8",
@@ -241,7 +245,7 @@ if __name__ == "__main__":
             compressor=compressor,
         )
         zarr_data.create_dataset(
-            "img",
+            "wrist_img",
             data=wrist_img_arrays,
             chunks=wrist_img_chunk_size,
             dtype="uint8",
