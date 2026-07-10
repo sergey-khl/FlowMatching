@@ -19,7 +19,7 @@ shape_meta: &shape_meta
     shape: [24]
 
 env_runner:
-  _target_: diffusion_policy_3d.env_runner.adroit_runner.AdroitRunner
+  _target_: diffusion_policy_3d.env_runner.adroit_runner.adroitrunner
   eval_episodes: 20
   max_steps: 300
   n_obs_steps: ${n_obs_steps}
