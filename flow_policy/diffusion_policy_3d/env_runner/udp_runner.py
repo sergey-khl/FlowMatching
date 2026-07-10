@@ -20,6 +20,13 @@ from diffusion_policy_3d.common.multi_flir_manager import MultiFLIRManager
 from diffusion_policy_3d.common.udp_handler import TeleopUDPHandler
 import torchvision
 
+WAM_FORCE_LIMIT  = 5
+WAM_TORQUE_LIMIT =  5
+ 
+KP_POS = 300   # N/m
+KP_ROT = 5   # N·m/rad
+ 
+
 def quat_to_rotvec(quat):
     """compute state angle as a rotvec based on the home quat"""
     quat_xyzw = np.roll(quat, -1, axis=-1)
@@ -37,6 +44,35 @@ def preprocess_image(image):
     image = image.permute(1, 2, 0)  # 4xHxW -> HxWx4
     image = image.cpu().numpy()
     return image
+
+def _rotvec_delta_to_rot_error(delta_rotvec: np.ndarray) -> np.ndarray:
+    """
+    Convert an incremental euler-XYZ delta (radians, EE frame) to a rotation
+    error vector suitable for a proportional torque controller.
+    """
+    q = R.from_rotvec(delta_rotvec).as_quat()
+    qx, qy, qz, qw = q
+    return 2.0 * np.sign(qw) * np.array([qx, qy, qz])
+ 
+ 
+def delta_to_wrench(delta: np.ndarray) -> np.ndarray:
+    """
+    Convert a single incremental delta [dx, dy, dz, droll, dpitch, dyaw, gripper]
+    expressed in the EE frame into a wrench [fx, fy, fz, tx, ty, tz, gripper].
+    """
+    delta_pos        = delta[:3]
+    delta_rotvec  = delta[3:6]
+    gripper          = delta[6]
+ 
+    force  = KP_POS * delta_pos
+    torque = KP_ROT * _rotvec_delta_to_rot_error(delta_rotvec)
+ 
+    force  = np.clip(force,  -WAM_FORCE_LIMIT,  WAM_FORCE_LIMIT)
+    torque = np.clip(torque, -WAM_TORQUE_LIMIT, WAM_TORQUE_LIMIT)
+ 
+    return np.concatenate([force, torque, [gripper]])
+ 
+
 
 
 class UdpRunner(BaseRunner):
@@ -256,10 +292,15 @@ class UdpRunner(BaseRunner):
                     # device_transfer
                     np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
 
-                    action = np_action_dict['action'].squeeze(0)
-                    print(action)
+                    action_chunk = np_action_dict['action'].squeeze(0)
 
-                    self.follower_sender.send_action_chunk(action)
+                    wrench_chunk = np.stack(
+                        [delta_to_wrench(d) for d in action_chunk]
+                    )
+
+                    print(wrench_chunk)
+
+                    self.follower_sender.send_action_chunk(wrench_chunk)
 
                 # sleep, accounting for the time the loop already took to try and keep the desired frequency
                 elapsed_time = time.time() - loop_start_time
