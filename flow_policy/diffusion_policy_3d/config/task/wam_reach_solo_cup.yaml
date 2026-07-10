@@ -30,6 +30,7 @@ env_runner:
   action_horizon: 5
   loop_hz: 10
   debug: False
+  n_obs_steps: ${n_obs_steps}
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset

@@ -8,6 +8,7 @@ import os
 import struct
 from termcolor import cprint
 from pynput import keyboard
+from scipy.spatial.transform import Rotation as R
 
 from diffusion_policy_3d.policy.base_policy import BasePolicy
 from diffusion_policy_3d.common.pytorch_util import dict_apply
@@ -18,6 +19,13 @@ from diffusion_policy_3d.common.recorder_receiver import RecorderReceiver
 from diffusion_policy_3d.common.multi_flir_manager import MultiFLIRManager
 from diffusion_policy_3d.common.udp_handler import TeleopUDPHandler
 import torchvision
+
+def quat_to_rotvec(quat):
+    """compute state angle as a rotvec based on the home quat"""
+    quat_xyzw = np.roll(quat, -1, axis=-1)
+    ref_xyzw = np.roll(np.array([0.8311519102829725, 0.0005888003896006177, -0.556030721230029, -0.003999049322114239]), -1 , axis=-1) # home quat
+    r = R.from_quat(ref_xyzw).inv() * R.from_quat(quat_xyzw)
+    return r.as_rotvec()
 
 def preprocess_image(image):
     img_size = 84
@@ -43,6 +51,7 @@ class UdpRunner(BaseRunner):
                 action_horizon: int = 5,
                 loop_hz: int = 10,
                 debug: bool = False,
+                n_obs_steps: int = 2,
                 ):
         super().__init__(output_dir)
 
@@ -50,6 +59,9 @@ class UdpRunner(BaseRunner):
         self.action_horizon = action_horizon
         self.loop_hz = loop_hz
         self.debug = debug
+
+        self.n_obs_steps = n_obs_steps
+        self.obs_history = collections.deque(maxlen=self.n_obs_steps)
  
         # UDP comms - same helper classes used in main.py
         self.follower_listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
@@ -58,8 +70,8 @@ class UdpRunner(BaseRunner):
         )
 
         camera_configs = {
-            "wrist_image": wrist_cam_serial,
-            "front_image": front_cam_serial,
+            "wrist_img": wrist_cam_serial,
+            "front_img": front_cam_serial,
         }
         self.camera_manager = MultiFLIRManager(camera_configs)
         self.camera_manager.start_all()
@@ -131,6 +143,7 @@ class UdpRunner(BaseRunner):
         if self.loop_state == "IDLE":
             self.loop_state = "INFER"
             self.doing_inference = True
+            self.obs_history.clear()
             cprint("\n[INFERENCE] 🔴 EPISODE STARTED", "red", attrs=["bold"])
         elif self.loop_state == "INFER":
             self.loop_state = "IDLE"
@@ -205,24 +218,40 @@ class UdpRunner(BaseRunner):
                     continue
 
                 obs = image_dict.copy()
-                obs["low_dim"] = state_dict
 
-                np_obs_dict = dict(obs)
+                position = state_dict["follower_cart_pos"]
+                rotation = quat_to_rotvec(state_dict["follower_cart_rot"])
+                gripper = state_dict["gripper_pos"]
+                
+                state = np.concatenate([
+                    position,
+                    rotation,
+                    [gripper],
+                    [-gripper],
+                ]).astype(np.float32)  # (8,)
+
+                obs["agent_pos"] = state
+
+                self.obs_history.append(obs)
+
+                while len(self.obs_history) < self.n_obs_steps:
+                    self.obs_history.append(obs)
+
+                # stack along a new time axis: each key -> (n_obs_steps, ...)
+                stacked_obs = {
+                    key: np.stack([o[key] for o in self.obs_history], axis=0)
+                    for key in obs.keys()
+                }
+
                 # device transfer
-                obs_dict = dict_apply(np_obs_dict,
-                                      lambda x: torch.from_numpy(x).to(
+                obs_dict = dict_apply(stacked_obs,
+                                      lambda x: torch.from_numpy(x).unsqueeze(0).to(
                                           device=device))
 
                 # run policy
                 if self.doing_inference and self.loop_state == "INFER":
                     with torch.no_grad():
-                        # add batch dim to match. (1,2,3,84,84)
-                        # and multiply by 255, align with all envs
-                        obs_dict_input = {}  # flush unused keys
-                        obs_dict_input['point_cloud'] = obs_dict['point_cloud'].unsqueeze(0)
-                        obs_dict_input['imagin_robot'] = obs_dict['imagin_robot'].unsqueeze(0)
-                        obs_dict_input['agent_pos'] = obs_dict['agent_pos'].unsqueeze(0)
-                        action_dict = policy.predict_action(obs_dict_input)
+                        action_dict = policy.predict_action(obs_dict)
 
                     # device_transfer
                     np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
