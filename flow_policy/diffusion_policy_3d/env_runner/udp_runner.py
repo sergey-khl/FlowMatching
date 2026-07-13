@@ -23,8 +23,9 @@ import torchvision
 WAM_FORCE_LIMIT  = 5
 WAM_TORQUE_LIMIT =  5
  
-KP_POS = 300   # N/m
-KP_ROT = 5   # N·m/rad
+KP_JP = 100   # N/m
+KP_POS = 100   # N/m
+KP_ROT = 0   # N·m/rad
  
 
 def quat_to_rotvec(quat):
@@ -33,6 +34,21 @@ def quat_to_rotvec(quat):
     ref_xyzw = np.roll(np.array([0.8311519102829725, 0.0005888003896006177, -0.556030721230029, -0.003999049322114239]), -1 , axis=-1) # home quat
     r = R.from_quat(ref_xyzw).inv() * R.from_quat(quat_xyzw)
     return r.as_rotvec()
+
+def quat_to_euler(quats):
+    """Quaternion [w, x, y, z] → Euler (roll, pitch, yaw) in radians."""
+    quats_xyzw = np.roll(quats, -1, axis=-1)
+
+    euler = R.from_quat(quats_xyzw).as_euler('xyz', degrees=False)  # (N,3)
+    # return np.unwrap(euler, axis=0)
+    return euler
+
+def quat_to_quat(quat):
+    """Quaternion [w, x, y, z] → quat"""
+    ref_quat = np.array([0.8311519102829725, 0.0005888003896006177, -0.556030721230029, -0.003999049322114239]) # home quat
+    if np.dot(quat, ref_quat) < 0:
+        quat *= -1
+    return quat
 
 def preprocess_image(image):
     img_size = 84
@@ -60,12 +76,34 @@ def delta_to_wrench(delta: np.ndarray) -> np.ndarray:
     Convert a single incremental delta [dx, dy, dz, droll, dpitch, dyaw, gripper]
     expressed in the EE frame into a wrench [fx, fy, fz, tx, ty, tz, gripper].
     """
-    delta_pos        = delta[:3]
-    delta_rotvec  = delta[3:6]
-    gripper          = delta[6]
+    delta_jp        = delta[:7]
+    # delta_pos        = delta[:3]
+    # delta_rotvec  = delta[3:6]
+    # gripper          = delta[6]
+    gripper          = delta[7]
+ 
+    # force  = KP_POS * delta_pos
+    # torque = KP_ROT * _rotvec_delta_to_rot_error(delta_rotvec)
+    torque = KP_JP * delta_jp
+ 
+    # force  = np.clip(force,  -WAM_FORCE_LIMIT,  WAM_FORCE_LIMIT)
+    torque = np.clip(torque, -WAM_TORQUE_LIMIT, WAM_TORQUE_LIMIT)
+ 
+    # return np.concatenate([force, torque, [gripper]])
+    return np.concatenate([torque, [gripper]])
+ 
+
+def abs_to_wrench(action: np.ndarray, observation) -> np.ndarray:
+    """
+    Convert a single absolute delta expressed in the EE frame into a wrench [fx, fy, fz, tx, ty, tz, gripper].
+    """
+    delta_pos = action[:3] - observation[:3]
+    # delta_rot  = [0, 0, 0, 0]
+    gripper          = action[7]
  
     force  = KP_POS * delta_pos
-    torque = KP_ROT * _rotvec_delta_to_rot_error(delta_rotvec)
+    # torque = KP_ROT * _rotvec_delta_to_rot_error(delta_rotvec)
+    torque = [0, 0, 0 ,0]
  
     force  = np.clip(force,  -WAM_FORCE_LIMIT,  WAM_FORCE_LIMIT)
     torque = np.clip(torque, -WAM_TORQUE_LIMIT, WAM_TORQUE_LIMIT)
@@ -84,29 +122,31 @@ class UdpRunner(BaseRunner):
                 wrist_cam_serial: str,
                 front_cam_serial: str,
                 dof: int = 7,
-                action_horizon: int = 5,
                 loop_hz: int = 10,
                 debug: bool = False,
                 n_obs_steps: int = 2,
+                n_action_steps: int = 4,
                 ):
         super().__init__(output_dir)
 
         self.DOF = dof
-        self.action_horizon = action_horizon
         self.loop_hz = loop_hz
         self.debug = debug
 
         self.n_obs_steps = n_obs_steps
+        self.n_action_steps = n_action_steps
         self.obs_history = collections.deque(maxlen=self.n_obs_steps)
+        self.past_actions = None
  
         # UDP comms - same helper classes used in main.py
         self.follower_listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
         self.follower_sender = TeleopUDPHandler(
-            remote_ip, send_port, DOF=self.DOF, horizon=self.action_horizon
+            remote_ip, send_port, action_size=self.n_action_steps, DOF=self.DOF, horizon=self.n_action_steps
         )
 
         camera_configs = {
             "wrist_img": wrist_cam_serial,
+            # "img": wrist_cam_serial,
             "front_img": front_cam_serial,
         }
         self.camera_manager = MultiFLIRManager(camera_configs)
@@ -255,21 +295,26 @@ class UdpRunner(BaseRunner):
 
                 obs = image_dict.copy()
 
-                position = state_dict["follower_cart_pos"]
-                rotation = quat_to_rotvec(state_dict["follower_cart_rot"])
+                # position = state_dict["follower_cart_pos"]
+                position = state_dict["follower_jp"]
+                # position = state_dict["follower_jp"]
+                # rotation = quat_to_rotvec(state_dict["follower_cart_rot"])
+                rotation = quat_to_quat(state_dict["follower_cart_rot"])
                 gripper = state_dict["gripper_pos"]
                 
                 state = np.concatenate([
                     position,
-                    rotation,
+                    # rotation,
                     [gripper],
-                    [-gripper],
+                    # [-gripper],
                 ]).astype(np.float32)  # (8,)
 
                 obs["agent_pos"] = state
 
                 self.obs_history.append(obs)
 
+                print("---------------------state")
+                print(list(state))
                 while len(self.obs_history) < self.n_obs_steps:
                     self.obs_history.append(obs)
 
@@ -287,20 +332,34 @@ class UdpRunner(BaseRunner):
                 # run policy
                 if self.doing_inference and self.loop_state == "INFER":
                     with torch.no_grad():
-                        action_dict = policy.predict_action(obs_dict)
+                        action_dict = policy.predict_action(obs_dict, self.past_actions)
 
                     # device_transfer
                     np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
 
                     action_chunk = np_action_dict['action'].squeeze(0)
 
-                    wrench_chunk = np.stack(
-                        [delta_to_wrench(d) for d in action_chunk]
-                    )
+                    print("---------------------wrench")
 
-                    print(wrench_chunk)
+                    for action in action_chunk:
+                        print(list(action))
+                    print("---------------------\n\n\n\n")
 
-                    self.follower_sender.send_action_chunk(wrench_chunk)
+                    # wrench_chunk = np.stack(
+                    #     [delta_to_wrench(d) for d in action_chunk]
+                    # )
+
+                    # wrench_chunk = np.stack(
+                    #     [abs_to_wrench(d, state) for d in action_chunk]
+                    # )
+
+                    execute_actions = action_chunk[:self.n_action_steps]
+                    # self.past_actions = np.array([[action_chunk[self.n_action_steps-1]]])
+
+                    # for action in wrench_chunk:
+                    #     print(list(action))
+
+                    self.follower_sender.send_action_chunk(execute_actions)
 
                 # sleep, accounting for the time the loop already took to try and keep the desired frequency
                 elapsed_time = time.time() - loop_start_time

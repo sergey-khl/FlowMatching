@@ -10,8 +10,7 @@ import zarr
 from termcolor import cprint
 from scipy.spatial.transform import Rotation as R
 
-
-USING_JOINTS = False
+CHUNK_SIZE = 50
 
 POS_THRESHOLD = 0.0005
 ROT_THRESHOLD = 0.0002
@@ -32,6 +31,20 @@ def quats_to_rotvec(quats):
     r = R.from_quat(ref_xyzw).inv() * R.from_quat(quats_xyzw)
     return r.as_rotvec()
 
+def quats_to_euler(quats):
+    """Quaternion [w, x, y, z] → Euler (roll, pitch, yaw) in radians."""
+    quats_xyzw = np.roll(quats, -1, axis=-1)
+
+    euler = R.from_quat(quats_xyzw).as_euler('xyz', degrees=False)  # (N,3)
+    return np.unwrap(euler, axis=0)
+
+def quats_to_quat(quats):
+    """Quaternion [w, x, y, z] → quat"""
+    ref_quat = np.array([0.8311519102829725, 0.0005888003896006177, -0.556030721230029, -0.003999049322114239]) # home quat
+    for i in range(len(quats)):
+        if np.dot(quats[i], ref_quat) < 0:
+            quats[i] *= -1
+    return quats
 
 def delta_rotvec(rot_current, rot_next):
     """Minimal rotation delta between two quaternions, as an axis-angle (rotation) vector."""
@@ -40,6 +53,26 @@ def delta_rotvec(rot_current, rot_next):
     r_delta = R.from_quat(curr_xyzw).inv() * R.from_quat(next_xyzw)
     return r_delta.as_rotvec()  # shape (3,), axis * angle_rad
 
+def delta_euler(rot_current, rot_next):
+    """Minimal rotation delta between two euler angles. already unwraped"""
+    r_delta = rot_next - rot_current
+    return r_delta
+
+def delta_quats(q1, q2):
+    """Rotation from q1 to q2 (q2 * inverse(q1), with q1 assumed unit norm)"""
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    return np.array([
+        w1*w2 + x1*x2 + y1*y2 + z1*z2,
+        w1*x2 - x1*w2 - y1*z2 + z1*y2,
+        w1*y2 + x1*z2 - y1*w2 - z1*x2,
+        w1*z2 - x1*y2 + y1*x2 - z1*w2,
+    ])
+
+def delta_jp(jp_current, jp_next):
+    """just sub the jp's"""
+    jp_delta = jp_next - jp_current
+    return jp_delta
 
 def is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
     """
@@ -74,7 +107,10 @@ def preprocess_image(image):
 
 if __name__ == "__main__":
     expert_data_path = "/home/serg/projects/openpi-wam/dataset"
-    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup.zarr"
+    # save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup.zarr"
+    # save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup_euler.zarr"
+    # save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup_quat.zarr"
+    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup_jp.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -121,6 +157,7 @@ if __name__ == "__main__":
         low_dim = data["low_dim"]
 
         timestamps_ns = low_dim["timestamp_ns"][:]
+        jp = low_dim["follower_jp"][:]       # (N, 7)
         cart_pos = low_dim["follower_cart_pos"][:]       # (N, 3)
         cart_rot = low_dim["follower_cart_rot"][:]        # (N, 4) w,x,y,z
         gripper_pos = low_dim["gripper_pos"][:]           # (N,)
@@ -132,13 +169,16 @@ if __name__ == "__main__":
         idxs = np.array([find_nearest_index(timestamps_ns, t) for t in target_times], dtype=np.int64)
         idxs = np.unique(idxs)  # sorted, deduped
 
+        jp_ds = jp[idxs]
         cart_pos_ds = cart_pos[idxs]
         cart_rot_ds = cart_rot[idxs]
         gripper_pos_ds = gripper_pos[idxs]
         front_img_ds = front_image[idxs]
         wrist_img_ds = wrist_image[idxs]
 
-        rotvec_ds = quats_to_rotvec(cart_rot_ds)
+        # rotvec_ds = quats_to_rotvec(cart_rot_ds)
+        # euler_ds = quats_to_euler(cart_rot_ds)
+        # quats_ds = quats_to_quat(cart_rot_ds)
         gripper_action_ds = np.where(gripper_pos_ds > GRIPPER_ACTION_THRESHOLD, 1, -1)
 
         episode_len = 0
@@ -146,24 +186,30 @@ if __name__ == "__main__":
         noop_count = 0
 
         for j in range(len(idxs) - 1):
-            delta_pos = cart_pos_ds[j + 1] - cart_pos_ds[j]
-            delta_rot = delta_rotvec(cart_rot_ds[j], cart_rot_ds[j + 1])
+            # delta_pos = cart_pos_ds[j + 1] - cart_pos_ds[j]
+            # delta_rot = delta_rotvec(cart_rot_ds[j], cart_rot_ds[j + 1])
+            # delta_rot = delta_euler(euler_ds[j], euler_ds[j + 1])
+            # delta_rot = delta_quats(quats_ds[j], quats_ds[j + 1])
+            # delta_rot = delta_jp(jp_ds[j], jp_ds[j + 1])
             gripper_action = gripper_action_ds[j + 1]
  
-            if is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
-                noop_count += 1
-                continue
+            # if is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
+            #     noop_count += 1
+            #     continue
  
             state = np.concatenate([
-                cart_pos_ds[j],
-                rotvec_ds[j],
+                # cart_pos_ds[j],
+                jp_ds[j],
+                # quats_ds[j],
                 [gripper_pos_ds[j]],
-                [-gripper_pos_ds[j]],
+                # [-gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
-                delta_pos,
-                delta_rot,
+                # cart_pos_ds[j + 1],
+                # quats_ds[j + 1],
+                # delta_pos,
+                jp_ds[j + 1],
                 [gripper_action],
             ]).astype(np.float32)  # (7,)
  
@@ -208,13 +254,13 @@ if __name__ == "__main__":
     compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
     if has_images:
         front_img_chunk_size = (
-            100,
+            CHUNK_SIZE,
             front_img_arrays.shape[1],
             front_img_arrays.shape[2],
             front_img_arrays.shape[3],
         )
         wrist_img_chunk_size = (
-            100,
+            CHUNK_SIZE,
             wrist_img_arrays.shape[1],
             wrist_img_arrays.shape[2],
             wrist_img_arrays.shape[3],
@@ -222,16 +268,16 @@ if __name__ == "__main__":
         
     if has_pointclouds:
         point_cloud_chunk_size = (
-            100,
+            CHUNK_SIZE,
             point_cloud_arrays.shape[1],
             point_cloud_arrays.shape[2],
         )
     
-    # depth_chunk_size = (100, depth_arrays.shape[1], depth_arrays.shape[2])
+    # depth_chunk_size = (CHUNK_SIZE, depth_arrays.shape[1], depth_arrays.shape[2])
     if len(action_arrays.shape) == 2:
-        action_chunk_size = (100, action_arrays.shape[1])
+        action_chunk_size = (CHUNK_SIZE, action_arrays.shape[1])
     elif len(action_arrays.shape) == 3:
-        action_chunk_size = (100, action_arrays.shape[1], action_arrays.shape[2])
+        action_chunk_size = (CHUNK_SIZE, action_arrays.shape[1], action_arrays.shape[2])
     else:
         raise NotImplementedError
     
@@ -246,6 +292,7 @@ if __name__ == "__main__":
         )
         zarr_data.create_dataset(
             "wrist_img",
+            # "img",
             data=wrist_img_arrays,
             chunks=wrist_img_chunk_size,
             dtype="uint8",
@@ -274,7 +321,7 @@ if __name__ == "__main__":
     zarr_data.create_dataset(
         "state",
         data=state_arrays,
-        chunks=(100, state_arrays.shape[1]),
+        chunks=(CHUNK_SIZE, state_arrays.shape[1]),
         dtype="float32",
         overwrite=True,
         compressor=compressor,
@@ -282,7 +329,7 @@ if __name__ == "__main__":
     zarr_meta.create_dataset(
         "episode_ends",
         data=episode_ends_arrays,
-        chunks=(100,),
+        chunks=(CHUNK_SIZE,),
         dtype="int64",
         overwrite=True,
         compressor=compressor,

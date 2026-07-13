@@ -144,14 +144,15 @@ class TrainDP3Workspace:
                 cfg.ema,
                 model=self.ema_model)
 
-        # configure env
-        env_runner: BaseRunner
-        env_runner = hydra.utils.instantiate(
-            cfg.task.env_runner,
-            output_dir=self.output_dir)
-
-        if env_runner is not None:
-            assert isinstance(env_runner, BaseRunner)
+        # NOTE: I removed env_runner from train because im lazy :)
+        # # configure env
+        # env_runner: BaseRunner
+        # env_runner = hydra.utils.instantiate(
+        #     cfg.task.env_runner,
+        #     output_dir=self.output_dir)
+        #
+        # if env_runner is not None:
+        #     assert isinstance(env_runner, BaseRunner)
         
         cfg.logging.name = str(cfg.logging.name)
         cprint("-----------------------------", "yellow")
@@ -262,15 +263,15 @@ class TrainDP3Workspace:
                 policy = self.ema_model
             policy.eval()
 
-            # run rollout
-            if (self.epoch % cfg.training.rollout_every) == 0 and RUN_ROLLOUT and env_runner is not None:
-                t3 = time.time()
-                # runner_log = env_runner.run(policy, dataset=dataset)
-                runner_log = env_runner.run(policy)
-                t4 = time.time()
-                # print(f"rollout time: {t4-t3:.3f}")
-                # log all
-                step_log.update(runner_log)
+            # # run rollout
+            # if (self.epoch % cfg.training.rollout_every) == 0 and RUN_ROLLOUT and env_runner is not None:
+            #     t3 = time.time()
+            #     # runner_log = env_runner.run(policy, dataset=dataset)
+            #     runner_log = env_runner.run(policy)
+            #     t4 = time.time()
+            #     # print(f"rollout time: {t4-t3:.3f}")
+            #     # log all
+            #     step_log.update(runner_log)
 
             
                 
@@ -383,8 +384,8 @@ class TrainDP3Workspace:
                     del pred_action
                     del mse
 
-            if env_runner is None:
-                step_log['test_mean_score'] = - train_loss
+            # if env_runner is None:
+            step_log['test_mean_score'] = - train_loss
                 
             # checkpoint
             if (self.epoch % cfg.training.checkpoint_every) == 0 and cfg.checkpoint.save_ckpt:
