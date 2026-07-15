@@ -146,9 +146,8 @@ class UdpRunner(BaseRunner):
         )
 
         camera_configs = {
-            # "wrist_img": wrist_cam_serial,
+            "wrist_img": wrist_cam_serial,
             # "front_img": front_cam_serial,
-            "img": wrist_cam_serial,
         }
         self.camera_manager = MultiFLIRManager(camera_configs)
         self.camera_manager.start_all()

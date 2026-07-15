@@ -149,6 +149,9 @@ if __name__ == "__main__":
     takeover_combined = []
 
     for i, demo_dir in enumerate(dirs):
+        if i % 5 != 0:
+            continue
+
         dir_name = os.path.dirname(demo_dir)
 
         cprint("Processing {}".format(demo_dir), "green")
@@ -292,7 +295,6 @@ if __name__ == "__main__":
         )
         zarr_data.create_dataset(
             "wrist_img",
-            # "img",
             data=wrist_img_arrays,
             chunks=wrist_img_chunk_size,
             dtype="uint8",

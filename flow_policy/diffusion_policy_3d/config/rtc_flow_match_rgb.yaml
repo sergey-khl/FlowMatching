@@ -32,7 +32,7 @@ policy:
   down_dims:
   - 128
   - 256
-  - 384
+  - 512
   crop_shape:
   - 80
   - 80

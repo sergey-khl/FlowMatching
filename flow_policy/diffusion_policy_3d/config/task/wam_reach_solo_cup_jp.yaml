@@ -10,10 +10,7 @@ shape_meta: &shape_meta
     # front_img:
     #     shape: *image_shape
     #     type: rgb
-    # wrist_img:
-    #     shape: *image_shape
-    #     type: rgb
-    img:
+    wrist_img:
         shape: *image_shape
         type: rgb
     agent_pos:
