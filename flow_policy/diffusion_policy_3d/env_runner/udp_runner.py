@@ -112,7 +112,6 @@ def abs_to_wrench(action: np.ndarray, observation) -> np.ndarray:
  
 
 
-
 class UdpRunner(BaseRunner):
     def __init__(self,
                  output_dir: str,
@@ -121,11 +120,12 @@ class UdpRunner(BaseRunner):
                 recv_port: int,
                 wrist_cam_serial: str,
                 front_cam_serial: str,
+                n_action_steps: int,
+                n_obs_steps: int,
+                horizon: int,
                 dof: int = 7,
                 loop_hz: int = 10,
                 debug: bool = False,
-                n_obs_steps: int = 2,
-                n_action_steps: int = 4,
                 ):
         super().__init__(output_dir)
 
@@ -135,19 +135,20 @@ class UdpRunner(BaseRunner):
 
         self.n_obs_steps = n_obs_steps
         self.n_action_steps = n_action_steps
+        self.horizon = horizon
         self.obs_history = collections.deque(maxlen=self.n_obs_steps)
         self.past_actions = None
  
         # UDP comms - same helper classes used in main.py
         self.follower_listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
         self.follower_sender = TeleopUDPHandler(
-            remote_ip, send_port, action_size=self.n_action_steps, DOF=self.DOF, horizon=self.n_action_steps
+            remote_ip, send_port, action_size=8, DOF=self.DOF, horizon=self.horizon
         )
 
         camera_configs = {
-            "wrist_img": wrist_cam_serial,
-            # "img": wrist_cam_serial,
-            "front_img": front_cam_serial,
+            # "wrist_img": wrist_cam_serial,
+            # "front_img": front_cam_serial,
+            "img": wrist_cam_serial,
         }
         self.camera_manager = MultiFLIRManager(camera_configs)
         self.camera_manager.start_all()
@@ -301,6 +302,7 @@ class UdpRunner(BaseRunner):
                 # rotation = quat_to_rotvec(state_dict["follower_cart_rot"])
                 rotation = quat_to_quat(state_dict["follower_cart_rot"])
                 gripper = state_dict["gripper_pos"]
+                timestamp_ns = state_dict["timestamp_ns"]
                 
                 state = np.concatenate([
                     position,
@@ -337,12 +339,14 @@ class UdpRunner(BaseRunner):
                     # device_transfer
                     np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
 
-                    action_chunk = np_action_dict['action'].squeeze(0)
+                    # action_chunk = np_action_dict['action'].squeeze(0)
+                    action_chunk = np_action_dict['action_pred'].squeeze(0)
 
                     print("---------------------wrench")
 
                     for action in action_chunk:
                         print(list(action))
+                    print(timestamp_ns)
                     print("---------------------\n\n\n\n")
 
                     # wrench_chunk = np.stack(
@@ -353,13 +357,14 @@ class UdpRunner(BaseRunner):
                     #     [abs_to_wrench(d, state) for d in action_chunk]
                     # )
 
-                    execute_actions = action_chunk[:self.n_action_steps]
+                    # execute_actions = action_chunk[:self.n_action_steps]
                     # self.past_actions = np.array([[action_chunk[self.n_action_steps-1]]])
 
-                    # for action in wrench_chunk:
+                    # for action in execute_actions:
                     #     print(list(action))
 
-                    self.follower_sender.send_action_chunk(execute_actions)
+                    # we will send along the time at which inference is started so that on the robot side we dont execute actions that are too old
+                    self.follower_sender.send_action_chunk(action_chunk, timestamp_ns)
 
                 # sleep, accounting for the time the loop already took to try and keep the desired frequency
                 elapsed_time = time.time() - loop_start_time

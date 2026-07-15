@@ -7,10 +7,13 @@ image_shape: &image_shape [3, 84, 84]
 shape_meta: &shape_meta
   # acceptable types: rgb, low_dim
   obs:
-    front_img:
-        shape: *image_shape
-        type: rgb
-    wrist_img:
+    # front_img:
+    #     shape: *image_shape
+    #     type: rgb
+    # wrist_img:
+    #     shape: *image_shape
+    #     type: rgb
+    img:
         shape: *image_shape
         type: rgb
     agent_pos:
@@ -31,6 +34,7 @@ env_runner:
   debug: False
   n_obs_steps: ${n_obs_steps}
   n_action_steps: ${n_action_steps}
+  horizon: ${horizon}
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset

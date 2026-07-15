@@ -36,7 +36,7 @@ class TeleopUDPHandler:
         print(f"UDP [inference send]: {remote_ip}:{send_port}.")
 
 
-    def send_action_chunk(self, actions):
+    def send_action_chunk(self, actions, timestamp_ns):
         """
         Sends a chunk of actions to the remote target in one packet.
         """
@@ -47,8 +47,7 @@ class TeleopUDPHandler:
                 f"got {actions.shape}"
             )
 
-        now_ns = time.time_ns()
-        header = struct.pack(self.header_fmt, now_ns)
+        header = struct.pack(self.header_fmt, timestamp_ns)
         payload = header + actions.tobytes()
 
         try:
