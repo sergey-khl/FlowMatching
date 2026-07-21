@@ -10,7 +10,7 @@ import zarr
 from termcolor import cprint
 from scipy.spatial.transform import Rotation as R
 
-CHUNK_SIZE = 50
+CHUNK_SIZE = 100
 
 POS_THRESHOLD = 0.0005
 ROT_THRESHOLD = 0.0002
@@ -107,10 +107,7 @@ def preprocess_image(image):
 
 if __name__ == "__main__":
     expert_data_path = "/home/serg/projects/openpi-wam/dataset"
-    # save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup.zarr"
-    # save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup_euler.zarr"
-    # save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup_quat.zarr"
-    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/reach_solo_cup_jp.zarr"
+    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/pandp_solo_cup_jp.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -149,8 +146,6 @@ if __name__ == "__main__":
     takeover_combined = []
 
     for i, demo_dir in enumerate(dirs):
-        if i % 5 != 0:
-            continue
 
         dir_name = os.path.dirname(demo_dir)
 

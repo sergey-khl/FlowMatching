@@ -137,6 +137,7 @@ class UdpRunner(BaseRunner):
         self.n_action_steps = n_action_steps
         self.horizon = horizon
         self.obs_history = collections.deque(maxlen=self.n_obs_steps)
+        self.obs_timestamps = collections.deque(maxlen=self.n_obs_steps)
         self.past_actions = None
  
         # UDP comms - same helper classes used in main.py
@@ -147,7 +148,7 @@ class UdpRunner(BaseRunner):
 
         camera_configs = {
             "wrist_img": wrist_cam_serial,
-            # "front_img": front_cam_serial,
+            "front_img": front_cam_serial,
         }
         self.camera_manager = MultiFLIRManager(camera_configs)
         self.camera_manager.start_all()
@@ -302,7 +303,14 @@ class UdpRunner(BaseRunner):
                 rotation = quat_to_quat(state_dict["follower_cart_rot"])
                 gripper = state_dict["gripper_pos"]
                 timestamp_ns = state_dict["timestamp_ns"]
-                
+
+                # clear queues if any observation is stale
+                if len(self.obs_history) > 0 and (timestamp_ns - self.obs_timestamps[0]) / 1e9 > self.n_obs_steps * loop_delay:
+                    self.obs_history.clear()
+                    self.obs_timestamps.clear()
+                    continue
+
+
                 state = np.concatenate([
                     position,
                     # rotation,
@@ -313,11 +321,13 @@ class UdpRunner(BaseRunner):
                 obs["agent_pos"] = state
 
                 self.obs_history.append(obs)
+                self.obs_timestamps.append(timestamp_ns)
+
 
                 print("---------------------state")
                 print(list(state))
-                while len(self.obs_history) < self.n_obs_steps:
-                    self.obs_history.append(obs)
+                if len(self.obs_history) < self.n_obs_steps:
+                    continue
 
                 # stack along a new time axis: each key -> (n_obs_steps, ...)
                 stacked_obs = {
@@ -363,7 +373,7 @@ class UdpRunner(BaseRunner):
                     #     print(list(action))
 
                     # we will send along the time at which inference is started so that on the robot side we dont execute actions that are too old
-                    self.follower_sender.send_action_chunk(action_chunk, timestamp_ns)
+                    self.follower_sender.send_action_chunk(action_chunk[:, :10], timestamp_ns)
 
                 # sleep, accounting for the time the loop already took to try and keep the desired frequency
                 elapsed_time = time.time() - loop_start_time
