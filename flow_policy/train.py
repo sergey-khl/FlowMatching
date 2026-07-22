@@ -423,10 +423,10 @@ class TrainDP3Workspace:
         
         cfg = copy.deepcopy(self.cfg)
         
-        lastest_ckpt_path = self.get_checkpoint_path(tag="latest")
-        if lastest_ckpt_path.is_file():
-            cprint(f"Resuming from checkpoint {lastest_ckpt_path}", 'magenta')
-            self.load_checkpoint(path=lastest_ckpt_path)
+        ckpt_path = self.get_checkpoint_path(tag=cfg.checkpoint.tag)
+        if ckpt_path.is_file():
+            cprint(f"EVAL on checkpoint {ckpt_path}", 'magenta')
+            self.load_checkpoint(path=ckpt_path)
         
         # configure env
         env_runner: BaseRunner
@@ -515,6 +515,19 @@ class TrainDP3Workspace:
                     best_ckpt = ckpt
                     best_score = score
             return pathlib.Path(self.output_dir).joinpath('checkpoints', best_ckpt)
+        elif isinstance(tag, int):
+            # find the checkpoint matching this epoch number
+            checkpoint_dir = pathlib.Path(self.output_dir).joinpath('checkpoints')
+            all_checkpoints = os.listdir(checkpoint_dir)
+            epoch_str = f'epoch={tag:04d}'
+            match_ckpt = None
+            for ckpt in all_checkpoints:
+                if epoch_str in ckpt:
+                    match_ckpt = ckpt
+                    break
+            if match_ckpt is None:
+                raise FileNotFoundError(f"no checkpoint found for epoch {tag}")
+            return pathlib.Path(self.output_dir).joinpath('checkpoints', match_ckpt)
         else:
             raise NotImplementedError(f"tag {tag} not implemented")
             

@@ -38,6 +38,12 @@ def quats_to_euler(quats):
     euler = R.from_quat(quats_xyzw).as_euler('xyz', degrees=False)  # (N,3)
     return np.unwrap(euler, axis=0)
 
+def quats_to_rotmat(quats):
+    """Quaternion [w, x, y, z] -> first two rows of the rotation matrix."""
+    quats_xyzw = np.roll(quats, -1, axis=-1)
+    rotmat = R.from_quat(quats_xyzw).as_matrix()  # (..., 3, 3)
+    return rotmat[..., :2, :].reshape(*rotmat.shape[:-2], 6)
+
 def quats_to_quat(quats):
     """Quaternion [w, x, y, z] → quat"""
     ref_quat = np.array([0.8311519102829725, 0.0005888003896006177, -0.556030721230029, -0.003999049322114239]) # home quat
@@ -107,13 +113,22 @@ def preprocess_image(image):
 
 if __name__ == "__main__":
     expert_data_path = "/home/serg/projects/openpi-wam/dataset"
-    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/pandp_solo_cup_jp.zarr"
+    # save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/pandp_solo_cup_jp.zarr"
+    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/pandp_solo_cup_jp-ee_abs.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
         [f for f in dirs if re.match(r"episode_.*\.h(?:df)?5$", f)],
         key=lambda x: int(re.search(r"episode_(\d+).*\.h(?:df)?5$", x).group(1))
     )
+
+    frame_cutoffs = [
+        850, 959, 745, 739, 880, 763, 843, 726, 731, 684,
+        777, 825, 859, 736, 800, 712, 642, 603, 806, 788,
+        616, 777, 611, 688, 514, 707, 580, 680, 877, 666,
+        748, 617, 630, 800, 550, 580, 500, 580, 790, 680,
+        600, 590, 580, 630, 650, 630, 500, 666, 740, 590,
+    ]
 
     # storage
     total_count = 0
@@ -162,6 +177,17 @@ if __name__ == "__main__":
         front_image = data["front_image"]                 # (N, H, W, 3)
         wrist_image = data["wrist_image"]
 
+        cutoff = frame_cutoffs[i]
+
+        timestamps_ns = timestamps_ns[:cutoff]
+        jp = jp[:cutoff]
+        cart_pos = cart_pos[:cutoff]
+        cart_rot = cart_rot[:cutoff]
+        gripper_pos = gripper_pos[:cutoff]
+        front_image = front_image[:cutoff]
+        wrist_image = wrist_image[:cutoff]
+
+
         t0, t1 = timestamps_ns[0], timestamps_ns[-1]
         target_times = np.arange(t0, t1 + 1, TARGET_DT_NS)
         idxs = np.array([find_nearest_index(timestamps_ns, t) for t in target_times], dtype=np.int64)
@@ -177,6 +203,7 @@ if __name__ == "__main__":
         # rotvec_ds = quats_to_rotvec(cart_rot_ds)
         # euler_ds = quats_to_euler(cart_rot_ds)
         # quats_ds = quats_to_quat(cart_rot_ds)
+        rotmats_ds = quats_to_rotmat(cart_rot_ds)
         gripper_action_ds = np.where(gripper_pos_ds > GRIPPER_ACTION_THRESHOLD, 1, -1)
 
         episode_len = 0
@@ -196,9 +223,9 @@ if __name__ == "__main__":
             #     continue
  
             state = np.concatenate([
-                # cart_pos_ds[j],
                 jp_ds[j],
-                # quats_ds[j],
+                cart_pos_ds[j],
+                rotmats_ds[j],
                 [gripper_pos_ds[j]],
                 # [-gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
@@ -208,7 +235,8 @@ if __name__ == "__main__":
                 # quats_ds[j + 1],
                 # delta_pos,
                 jp_ds[j + 1],
-                [gripper_action],
+                # [gripper_action],
+                [gripper_pos_ds[j + 1]],
             ]).astype(np.float32)  # (7,)
  
             state_arrays.append(state)

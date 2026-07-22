@@ -143,7 +143,7 @@ class UdpRunner(BaseRunner):
         # UDP comms - same helper classes used in main.py
         self.follower_listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
         self.follower_sender = TeleopUDPHandler(
-            remote_ip, send_port, action_size=8, DOF=self.DOF, horizon=self.horizon
+            remote_ip, send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
         )
 
         camera_configs = {
@@ -348,15 +348,15 @@ class UdpRunner(BaseRunner):
                     # device_transfer
                     np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
 
-                    # action_chunk = np_action_dict['action'].squeeze(0)
-                    action_chunk = np_action_dict['action_pred'].squeeze(0)
+                    action_chunk = np_action_dict['action'].squeeze(0)
+                    # action_chunk = np_action_dict['action_pred'].squeeze(0)
 
                     print("---------------------wrench")
 
                     for action in action_chunk:
                         print(list(action))
                     print(timestamp_ns)
-                    print("---------------------\n\n\n\n")
+                    print("---------------------\n\n")
 
                     # wrench_chunk = np.stack(
                     #     [delta_to_wrench(d) for d in action_chunk]
@@ -367,13 +367,16 @@ class UdpRunner(BaseRunner):
                     # )
 
                     # execute_actions = action_chunk[:self.n_action_steps]
-                    # self.past_actions = np.array([[action_chunk[self.n_action_steps-1]]])
-
-                    # for action in execute_actions:
+                    # self.past_actions = np.array([action_chunk[self.n_action_steps-1:, :]])
+                    #
+                    # print("---------------------past")
+                    #
+                    # for action in self.past_actions[0]:
                     #     print(list(action))
+                    # print("---------------------\n\n\n\n")
 
                     # we will send along the time at which inference is started so that on the robot side we dont execute actions that are too old
-                    self.follower_sender.send_action_chunk(action_chunk[:, :10], timestamp_ns)
+                    self.follower_sender.send_action_chunk(action_chunk, timestamp_ns)
 
                 # sleep, accounting for the time the loop already took to try and keep the desired frequency
                 elapsed_time = time.time() - loop_start_time
