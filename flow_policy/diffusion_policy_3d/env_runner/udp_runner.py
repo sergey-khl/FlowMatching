@@ -50,6 +50,12 @@ def quat_to_quat(quat):
         quat *= -1
     return quat
 
+def quat_to_rotmat(quat):
+    """Quaternion [w, x, y, z] -> first two rows of the rotation matrix."""
+    quat_xyzw = np.roll(quat, -1, axis=-1)
+    rotmat = R.from_quat(quat_xyzw).as_matrix()
+    return rotmat[:2, :].reshape(6)
+
 def preprocess_image(image):
     img_size = 84
 
@@ -296,11 +302,11 @@ class UdpRunner(BaseRunner):
 
                 obs = image_dict.copy()
 
-                # position = state_dict["follower_cart_pos"]
-                position = state_dict["follower_jp"]
+                ee = state_dict["follower_cart_pos"]
+                jp = state_dict["follower_jp"]
                 # position = state_dict["follower_jp"]
-                # rotation = quat_to_rotvec(state_dict["follower_cart_rot"])
-                rotation = quat_to_quat(state_dict["follower_cart_rot"])
+                rotation = quat_to_rotmat(state_dict["follower_cart_rot"])
+                # rotation = quat_to_quat(state_dict["follower_cart_rot"])
                 gripper = state_dict["gripper_pos"]
                 timestamp_ns = state_dict["timestamp_ns"]
 
@@ -312,8 +318,9 @@ class UdpRunner(BaseRunner):
 
 
                 state = np.concatenate([
-                    position,
-                    # rotation,
+                    jp,
+                    ee,
+                    rotation,
                     [gripper],
                     # [-gripper],
                 ]).astype(np.float32)  # (8,)
