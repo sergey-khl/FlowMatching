@@ -35,7 +35,7 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset
-  zarr_path: data_wam/wam_pandp_solo_cup_2cam_jp.zarr
+  zarr_path: data_wam/wam_pandp_solo_cup_jp.zarr
   horizon: ${horizon}
   pad_before: ${eval:'${n_obs_steps}-1'}
   pad_after: ${eval:'${n_action_steps}-1'}

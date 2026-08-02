@@ -2,8 +2,11 @@
 # bash scripts/train_policy.sh rtc_flow_match franka_peartable_test 0322 0 0
 # bash scripts/train_policy.sh dp3 adroit_hammer 0322 0 0
 # bash scripts/train_policy.sh dp3 dexart_laptop 0322 0 0
-# bash scripts/train_policy.sh rtc_flow_match_rgb wam_reach_solo_cup_jp 0001 0 0
 # bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_1cam_weighted_jp 0001 0 0
+# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_2cam_weighted_jp 0001 0 0
+# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_1cam_jp 0001 0 0
+# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_2cam_jp 0001 0 0
+# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_nodmp_solo_cup_1cam_jp 0001 0 0
 
 
 

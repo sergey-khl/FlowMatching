@@ -12,7 +12,7 @@ from scipy.spatial.transform import Rotation as R
 
 has_images = True
 has_pointclouds = False
-has_weights = True
+has_weights = False
 
 CHUNK_SIZE = 100
 
@@ -117,8 +117,8 @@ def preprocess_image(image):
 
 if __name__ == "__main__":
     # expert_data_path = "/home/serg/projects/openpi-wam/dataset"
-    expert_data_path = "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp"
-    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/wam_pandp_solo_cup_jp.zarr"
+    expert_data_path = "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp"
+    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/wam_pandp_no_dmp_solo_cup_jp.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -268,10 +268,12 @@ if __name__ == "__main__":
     if has_pointclouds:
         point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
     
+    if has_weights:
+        traj_weight_arrays = np.stack(traj_weight_arrays, axis=0)
+
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
     episode_ends_arrays = np.array(episode_ends_arrays)
-    traj_weight_arrays = np.stack(traj_weight_arrays, axis=0)
 
     compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
     if has_images:
