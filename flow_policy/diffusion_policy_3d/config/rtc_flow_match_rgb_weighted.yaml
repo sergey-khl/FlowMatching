@@ -31,7 +31,7 @@ policy:
   down_dims:
   - 128
   - 256
-  - 384
+  - 512
   crop_shape:
   - 80
   - 80
@@ -154,6 +154,7 @@ checkpoint:
     format_str: '${task.task_name}-epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt'
   save_last_ckpt: True # this only saves when save_ckpt is True
   save_last_snapshot: False
+  tag: 300 # which checkpoint to load for eval, one of [latest | best | <epoch>]
 
 multi_run:
   run_dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}

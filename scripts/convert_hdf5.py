@@ -10,6 +10,10 @@ import zarr
 from termcolor import cprint
 from scipy.spatial.transform import Rotation as R
 
+has_images = True
+has_pointclouds = False
+has_weights = True
+
 CHUNK_SIZE = 100
 
 POS_THRESHOLD = 0.0005
@@ -112,23 +116,15 @@ def preprocess_image(image):
 
 
 if __name__ == "__main__":
-    expert_data_path = "/home/serg/projects/openpi-wam/dataset"
-    # save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/pandp_solo_cup_jp.zarr"
-    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/pandp_solo_cup_jp-ee_abs.zarr"
+    # expert_data_path = "/home/serg/projects/openpi-wam/dataset"
+    expert_data_path = "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp"
+    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/wam_pandp_solo_cup_jp.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
         [f for f in dirs if re.match(r"episode_.*\.h(?:df)?5$", f)],
         key=lambda x: int(re.search(r"episode_(\d+).*\.h(?:df)?5$", x).group(1))
     )
-
-    frame_cutoffs = [
-        850, 959, 745, 739, 880, 763, 843, 726, 731, 684,
-        777, 825, 859, 736, 800, 712, 642, 603, 806, 788,
-        616, 777, 611, 688, 514, 707, 580, 680, 877, 666,
-        748, 617, 630, 800, 550, 580, 500, 580, 790, 680,
-        600, 590, 580, 630, 650, 630, 500, 666, 740, 590,
-    ]
 
     # storage
     total_count = 0
@@ -139,6 +135,7 @@ if __name__ == "__main__":
     state_arrays = []
     action_arrays = []
     episode_ends_arrays = []
+    traj_weight_arrays = []
 
     if os.path.exists(save_data_path):
         cprint("Data already exists at {}".format(save_data_path), "red")
@@ -155,10 +152,6 @@ if __name__ == "__main__":
     
     # check the first episode to see if we have images and point clouds
     data = h5py.File(os.path.join(expert_data_path, dirs[0]), "r")
-    has_images = "front_image" in data.keys()
-    has_pointclouds = "pointcloud" in data.keys()
-
-    takeover_combined = []
 
     for i, demo_dir in enumerate(dirs):
 
@@ -172,21 +165,11 @@ if __name__ == "__main__":
         timestamps_ns = low_dim["timestamp_ns"][:]
         jp = low_dim["follower_jp"][:]       # (N, 7)
         cart_pos = low_dim["follower_cart_pos"][:]       # (N, 3)
-        cart_rot = low_dim["follower_cart_rot"][:]        # (N, 4) w,x,y,z
+        cart_rot = low_dim["follower_quat_wxyz"][:]        # (N, 4) w,x,y,z
         gripper_pos = low_dim["gripper_pos"][:]           # (N,)
+        policy_torque_scale = low_dim["policy_torque_scale"][:] # (N, 7)
         front_image = data["front_image"]                 # (N, H, W, 3)
         wrist_image = data["wrist_image"]
-
-        cutoff = frame_cutoffs[i]
-
-        timestamps_ns = timestamps_ns[:cutoff]
-        jp = jp[:cutoff]
-        cart_pos = cart_pos[:cutoff]
-        cart_rot = cart_rot[:cutoff]
-        gripper_pos = gripper_pos[:cutoff]
-        front_image = front_image[:cutoff]
-        wrist_image = wrist_image[:cutoff]
-
 
         t0, t1 = timestamps_ns[0], timestamps_ns[-1]
         target_times = np.arange(t0, t1 + 1, TARGET_DT_NS)
@@ -199,12 +182,20 @@ if __name__ == "__main__":
         gripper_pos_ds = gripper_pos[idxs]
         front_img_ds = front_image[idxs]
         wrist_img_ds = wrist_image[idxs]
+        policy_torque_scale_ds = policy_torque_scale[idxs]
 
         # rotvec_ds = quats_to_rotvec(cart_rot_ds)
         # euler_ds = quats_to_euler(cart_rot_ds)
         # quats_ds = quats_to_quat(cart_rot_ds)
         rotmats_ds = quats_to_rotmat(cart_rot_ds)
         gripper_action_ds = np.where(gripper_pos_ds > GRIPPER_ACTION_THRESHOLD, 1, -1)
+
+        weight_sum = 0
+        if has_weights:
+            inverted_torques = 1 - policy_torque_scale_ds[:, 0:4]
+            for j in range(len(idxs)):
+                weight_sum += np.sum(inverted_torques[j], axis=0)
+
 
         episode_len = 0
         prev_gripper_action = None
@@ -224,8 +215,8 @@ if __name__ == "__main__":
  
             state = np.concatenate([
                 jp_ds[j],
-                cart_pos_ds[j],
-                rotmats_ds[j],
+                # cart_pos_ds[j],
+                # rotmats_ds[j],
                 [gripper_pos_ds[j]],
                 # [-gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
@@ -239,6 +230,10 @@ if __name__ == "__main__":
                 [gripper_pos_ds[j + 1]],
             ]).astype(np.float32)  # (7,)
  
+            if has_weights:
+                weight_scale = len(idxs) / weight_sum
+                traj_weight_arrays.append(np.sum(inverted_torques[j], axis=0) * weight_scale)
+
             state_arrays.append(state)
             action_arrays.append(action)
             front_img_arrays.append(preprocess_image(front_img_ds[j]))
@@ -276,6 +271,7 @@ if __name__ == "__main__":
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
     episode_ends_arrays = np.array(episode_ends_arrays)
+    traj_weight_arrays = np.stack(traj_weight_arrays, axis=0)
 
     compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
     if has_images:
@@ -297,6 +293,11 @@ if __name__ == "__main__":
             CHUNK_SIZE,
             point_cloud_arrays.shape[1],
             point_cloud_arrays.shape[2],
+        )
+
+    if has_weights:
+        traj_weights_chunk_size = (
+            CHUNK_SIZE,
         )
     
     # depth_chunk_size = (CHUNK_SIZE, depth_arrays.shape[1], depth_arrays.shape[2])
@@ -335,6 +336,15 @@ if __name__ == "__main__":
             compressor=compressor,
         )
         
+    if has_weights:
+        zarr_data.create_dataset('traj_weight',
+             data=traj_weight_arrays,
+             dtype='float32',
+             chunks=traj_weights_chunk_size,
+             overwrite=True,
+             compressor=compressor
+        )
+
     zarr_data.create_dataset(
         "action",
         data=action_arrays,
@@ -375,6 +385,12 @@ if __name__ == "__main__":
     if has_pointclouds:
         cprint(
             f"point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]",
+            "green",
+        )
+
+    if has_weights:
+        cprint(
+            f"weight shape: {traj_weight_arrays.shape}, range: [{np.min(traj_weight_arrays)}, {np.max(traj_weight_arrays)}]",
             "green",
         )
         
