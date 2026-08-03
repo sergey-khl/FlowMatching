@@ -122,7 +122,8 @@ class UdpRunner(BaseRunner):
     def __init__(self,
                  output_dir: str,
                 remote_ip: str,
-                send_port: int,
+                follower_send_port: int,
+                leader_send_port: int,
                 recv_port: int,
                 wrist_cam_serial: str,
                 front_cam_serial: str,
@@ -147,9 +148,12 @@ class UdpRunner(BaseRunner):
         self.past_actions = None
  
         # UDP comms - same helper classes used in main.py
-        self.follower_listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
+        self.listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
         self.follower_sender = TeleopUDPHandler(
-            remote_ip, send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
+            remote_ip, follower_send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
+        )
+        self.leader_sender = TeleopUDPHandler(
+            remote_ip, leader_send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
         )
 
         camera_configs = {
@@ -248,7 +252,7 @@ class UdpRunner(BaseRunner):
         return True, processed_frames
 
     def _read_state(self):
-        state_dict = self.follower_listener.receive_latest_data()
+        state_dict = self.listener.receive_latest_data()
         status = state_dict is not None
 
         return status, state_dict
@@ -302,11 +306,11 @@ class UdpRunner(BaseRunner):
 
                 obs = image_dict.copy()
 
-                ee = state_dict["follower_cart_pos"]
+                ee = state_dict["follower_quat_wxyz"]
                 jp = state_dict["follower_jp"]
                 # position = state_dict["follower_jp"]
-                rotation = quat_to_rotmat(state_dict["follower_cart_rot"])
-                # rotation = quat_to_quat(state_dict["follower_cart_rot"])
+                rotation = quat_to_rotmat(state_dict["follower_quat_wxyz"])
+                # rotation = quat_to_quat(state_dict["follower_quat_wxyz"])
                 gripper = state_dict["gripper_pos"]
                 timestamp_ns = state_dict["timestamp_ns"]
 
@@ -319,8 +323,8 @@ class UdpRunner(BaseRunner):
 
                 state = np.concatenate([
                     jp,
-                    ee,
-                    rotation,
+                    # ee,
+                    # rotation,
                     [gripper],
                     # [-gripper],
                 ]).astype(np.float32)  # (8,)
@@ -384,6 +388,7 @@ class UdpRunner(BaseRunner):
 
                     # we will send along the time at which inference is started so that on the robot side we dont execute actions that are too old
                     self.follower_sender.send_action_chunk(action_chunk, timestamp_ns)
+                    self.leader_sender.send_action_chunk(action_chunk, timestamp_ns)
 
                 # sleep, accounting for the time the loop already took to try and keep the desired frequency
                 elapsed_time = time.time() - loop_start_time

@@ -22,7 +22,8 @@ shape_meta: &shape_meta
 env_runner:
   _target_: diffusion_policy_3d.env_runner.udp_runner.UdpRunner
   remote_ip: "127.0.0.1"
-  send_port: 6666
+  follower_send_port: 20000
+  leader_send_port: 10000
   recv_port: 6554
   wrist_cam_serial: "18475182"
   front_cam_serial: "18475176"

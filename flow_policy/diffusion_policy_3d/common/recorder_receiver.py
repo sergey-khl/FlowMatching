@@ -11,11 +11,10 @@ class RecorderReceiver:
         self.dof = dof
         self.recv_port = recv_port
 
-        # Structure format matches C++ RecorderPayload
-        # '<'  = Little-endian (Standard memory layout)
-        # 4 arrays of doubles (jp, jv, ext_tau, meas_tau, tool_pos, tool_rot) + 1 double (gripper) = (4 * dof) + 3 + 4 + 1
+        # 7 DOF-length arrays + follower(cart_pos 3 + quat 4) + leader(cart_pos 3 + quat 4)
+        # + gripper_pos + gripper_vel + gripper_torque
         # 'Q'  = uint64_t (timestamp)
-        num_doubles = (6 * self.dof) + 10
+        num_doubles = (7 * self.dof) + 17
         self.fmt = f"<{num_doubles}dQ"
         self.packet_size = struct.calcsize(self.fmt)
 
@@ -61,29 +60,36 @@ class RecorderReceiver:
         # Unpack the freshest packet
         unpacked = struct.unpack(self.fmt, latest_data)
 
-        # Calculate slicing indices
-        idx_follower_jp = 0
-        idx_follower_jv = self.dof
-        idx_follower_ext_tau = self.dof * 2
-        idx_leader_jp = self.dof * 3
-        idx_leader_jv = self.dof * 4
-        idx_leader_ext_tau = self.dof * 5
-        idx_follower_cart_pos = self.dof * 6
-        idx_follower_cart_rot = self.dof * 6 + 3
-        idx_gripper_pos = self.dof * 6 + 7
-        idx_gripper_vel = self.dof * 6 + 8
-        idx_gripper_torque = self.dof * 6 + 9
-        idx_timestamp = self.dof * 6 + 10
+        dof = self.dof
 
+        idx_follower_jp = 0
+        idx_follower_jv = dof
+        idx_follower_ext_tau = dof * 2
+        idx_leader_jp = dof * 3
+        idx_leader_jv = dof * 4
+        idx_leader_ext_tau = dof * 5
+        idx_policy_torque_scale = dof * 6
+        idx_follower_cart_pos = dof * 7
+        idx_follower_quat = dof * 7 + 3
+        idx_leader_cart_pos = dof * 7 + 7
+        idx_leader_quat = dof * 7 + 10
+        idx_gripper_pos = dof * 7 + 14
+        idx_gripper_vel = dof * 7 + 15
+        idx_gripper_torque = dof * 7 + 16
+        idx_timestamp = dof * 7 + 17
+ 
         return {
             "follower_jp": list(unpacked[idx_follower_jp:idx_follower_jv]),
             "follower_jv": list(unpacked[idx_follower_jv:idx_follower_ext_tau]),
             "follower_ext_torque": list(unpacked[idx_follower_ext_tau:idx_leader_jp]),
             "leader_jp": list(unpacked[idx_leader_jp:idx_leader_jv]),
             "leader_jv": list(unpacked[idx_leader_jv:idx_leader_ext_tau]),
-            "leader_ext_torque": list(unpacked[idx_leader_ext_tau:idx_follower_cart_pos]),
-            "follower_cart_pos": list(unpacked[idx_follower_cart_pos:idx_follower_cart_rot]),
-            "follower_cart_rot": list(unpacked[idx_follower_cart_rot:idx_gripper_pos]),
+            "leader_ext_torque": list(unpacked[idx_leader_ext_tau:idx_policy_torque_scale]),
+            "policy_torque_scale": list(unpacked[idx_policy_torque_scale:idx_follower_cart_pos]),
+            "follower_cart_pos": list(unpacked[idx_follower_cart_pos:idx_follower_quat]),
+            "follower_quat_wxyz": list(unpacked[idx_follower_quat:idx_leader_cart_pos]),
+            "leader_cart_pos": list(unpacked[idx_leader_cart_pos:idx_leader_quat]),
+            "leader_quat_wxyz": list(unpacked[idx_leader_quat:idx_gripper_pos]),
             "gripper_pos": unpacked[idx_gripper_pos],
             "gripper_vel": unpacked[idx_gripper_vel],
             "gripper_torque": unpacked[idx_gripper_torque],

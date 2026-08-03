@@ -23,7 +23,8 @@ env_runner:
   _target_: diffusion_policy_3d.env_runner.udp_runner.UdpRunner
   remote_ip: "127.0.0.1"
   send_port: 6666
-  recv_port: 6554
+  follower_recv_port: 20000
+  leader_recv_port: 20000
   wrist_cam_serial: "18475182"
   front_cam_serial: "18475176"
   dof: 7
