@@ -129,9 +129,6 @@ class UdpRunner(BaseRunner):
         self.camera_manager = MultiFLIRManager(camera_configs)
         self.camera_manager.start_all()
 
-        # simple on/off toggle for sending actions - no recording states needed
-        self.doing_inference = False
-        
         self.loop_state = "IDLE"  # States: IDLE, INFER
 
         # Set up Joystick
@@ -172,6 +169,9 @@ class UdpRunner(BaseRunner):
                 if ev_type == 0x01 and value == 1:
                     if number == 1:  # 'o' button
                         self._handle_start_save_action()
+                    elif number == 0:  # 'x' button
+                        print("press x")
+                        self._handle_stop()
 
         except BlockingIOError:
             pass
@@ -186,8 +186,9 @@ class UdpRunner(BaseRunner):
                 k = key.char.lower()
 
                 if k == "r":
-                    if self.loop_state == "IDLE":
-                        self._handle_start_save_action()
+                    self._handle_start_save_action()
+                elif k == "d":
+                    self._handle_stop()
         except Exception:
             pass
 
@@ -195,13 +196,15 @@ class UdpRunner(BaseRunner):
         """Unified logic for 'r' / 's' on keyboard and 'o' on joystick."""
         if self.loop_state == "IDLE":
             self.loop_state = "INFER"
-            self.doing_inference = True
             self.obs_history.clear()
             cprint("\n[INFERENCE] 🔴 EPISODE STARTED", "red", attrs=["bold"])
-        elif self.loop_state == "INFER":
+
+    def _handle_stop(self):
+        """'d' on keyboard / 'x' on joystick: stop any action sending."""
+        if self.loop_state == "INFER":
             self.loop_state = "IDLE"
-            self.doing_inference = False
-            cprint("\n[INFERENCE] ⏸ EPISODE PAUSED", "yellow")
+
+            cprint("Press [R] or 'o' to start recording", "cyan")
     
     def _read_images(self):
         status, raw_frames = self.camera_manager.read_all()
@@ -317,7 +320,7 @@ class UdpRunner(BaseRunner):
                                           device=device))
 
                 # run policy
-                if self.doing_inference and self.loop_state == "INFER":
+                if self.loop_state == "INFER":
                     time_to_chunk_end_s = obs["time_to_chunk_end_ns"] / 1e9
                     interval_elapsed = (time.time() - self.last_send_time) >= self.send_interval
 
