@@ -1,6 +1,6 @@
-name: wam_pandp_solo_cup_ee_rel
+name: wam_pandp_solo_cup_2cam_weighted_jp-ee
 
-task_name: wam_pandp_solo_cup_ee_rel
+task_name: wam_pandp_solo_cup_2cam_weighted_jp-ee
 
 image_shape: &image_shape [3, 84, 84]
 
@@ -14,7 +14,7 @@ shape_meta: &shape_meta
         shape: *image_shape
         type: rgb
     agent_pos:
-      shape: [10] # [...ee pos, ...2 rows of rotation matrix, gripper pos]
+      shape: [17] # [...7dofjp, ...ee pos, ...2x3 rows of rotation matrix, gripper pos]
       type: low_dimx
   action:
     shape: [8]
@@ -23,7 +23,8 @@ env_runner:
   _target_: diffusion_policy_3d.env_runner.udp_runner.UdpRunner
   remote_ip: "127.0.0.1"
   send_port: 6666
-  recv_port: 6554
+  follower_recv_port: 20000
+  leader_recv_port: 20000
   wrist_cam_serial: "18475182"
   front_cam_serial: "18475176"
   dof: 7
@@ -35,10 +36,11 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset
-  zarr_path: data_wam/pandp_solo_cup_ee_rel.zarr
+  zarr_path: data_wam/wam_pandp_solo_cup_jp-ee.zarr
   horizon: ${horizon}
   pad_before: ${eval:'${n_obs_steps}-1'}
   pad_after: ${eval:'${n_action_steps}-1'}
   seed: 42
   val_ratio: 0.0
   max_train_episodes: 90
+  weighted: True

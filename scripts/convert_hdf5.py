@@ -12,7 +12,7 @@ from scipy.spatial.transform import Rotation as R
 
 has_images = True
 has_pointclouds = False
-has_weights = False
+has_weights = True
 
 CHUNK_SIZE = 100
 
@@ -117,8 +117,8 @@ def preprocess_image(image):
 
 if __name__ == "__main__":
     # expert_data_path = "/home/serg/projects/openpi-wam/dataset"
-    expert_data_path = "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp"
-    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/wam_pandp_no_dmp_solo_cup_jp.zarr"
+    expert_data_path = "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp"
+    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/wam_pandp_solo_cup_jp-ee.zarr"
 
     dirs = os.listdir(expert_data_path)
     dirs = sorted(
@@ -215,8 +215,8 @@ if __name__ == "__main__":
  
             state = np.concatenate([
                 jp_ds[j],
-                # cart_pos_ds[j],
-                # rotmats_ds[j],
+                cart_pos_ds[j],
+                rotmats_ds[j],
                 [gripper_pos_ds[j]],
                 # [-gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
