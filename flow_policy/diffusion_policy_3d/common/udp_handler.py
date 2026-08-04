@@ -21,7 +21,7 @@ class TeleopUDPHandler:
         self.action_size = action_size
         
         # jp (DOF doubles) + jv (DOF doubles) + ext_torque (DOF doubles) +
-        # meas_torque (DOF doubles) + gripper (1 double) + timestamp (uint64_t)
+        # meas_torque (DOF doubles) + gripper (1 double) + time_to_skip_ns (uint64_t)
         self.header_fmt = "<Q"
         self.packet_size = struct.calcsize(self.header_fmt) + (
             self.horizon * self.action_size * 8
@@ -36,7 +36,7 @@ class TeleopUDPHandler:
         print(f"UDP [inference send]: {remote_ip}:{send_port}.")
 
 
-    def send_action_chunk(self, actions, timestamp_ns):
+    def send_action_chunk(self, actions, time_to_skip_ns):
         """
         Sends a chunk of actions to the remote target in one packet.
         """
@@ -47,7 +47,7 @@ class TeleopUDPHandler:
                 f"got {actions.shape}"
             )
 
-        header = struct.pack(self.header_fmt, timestamp_ns)
+        header = struct.pack(self.header_fmt, time_to_skip_ns)
         payload = header + actions.tobytes()
 
         try:

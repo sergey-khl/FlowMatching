@@ -17,6 +17,7 @@ import diffusion_policy_3d.common.logger_util as logger_util
 
 from diffusion_policy_3d.common.recorder_receiver import RecorderReceiver
 from diffusion_policy_3d.common.multi_flir_manager import MultiFLIRManager
+from diffusion_policy_3d.common.precise_sleep import precise_wait
 from diffusion_policy_3d.common.udp_handler import TeleopUDPHandler
 import torchvision
 
@@ -77,47 +78,6 @@ def _rotvec_delta_to_rot_error(delta_rotvec: np.ndarray) -> np.ndarray:
     return 2.0 * np.sign(qw) * np.array([qx, qy, qz])
  
  
-def delta_to_wrench(delta: np.ndarray) -> np.ndarray:
-    """
-    Convert a single incremental delta [dx, dy, dz, droll, dpitch, dyaw, gripper]
-    expressed in the EE frame into a wrench [fx, fy, fz, tx, ty, tz, gripper].
-    """
-    delta_jp        = delta[:7]
-    # delta_pos        = delta[:3]
-    # delta_rotvec  = delta[3:6]
-    # gripper          = delta[6]
-    gripper          = delta[7]
- 
-    # force  = KP_POS * delta_pos
-    # torque = KP_ROT * _rotvec_delta_to_rot_error(delta_rotvec)
-    torque = KP_JP * delta_jp
- 
-    # force  = np.clip(force,  -WAM_FORCE_LIMIT,  WAM_FORCE_LIMIT)
-    torque = np.clip(torque, -WAM_TORQUE_LIMIT, WAM_TORQUE_LIMIT)
- 
-    # return np.concatenate([force, torque, [gripper]])
-    return np.concatenate([torque, [gripper]])
- 
-
-def abs_to_wrench(action: np.ndarray, observation) -> np.ndarray:
-    """
-    Convert a single absolute delta expressed in the EE frame into a wrench [fx, fy, fz, tx, ty, tz, gripper].
-    """
-    delta_pos = action[:3] - observation[:3]
-    # delta_rot  = [0, 0, 0, 0]
-    gripper          = action[7]
- 
-    force  = KP_POS * delta_pos
-    # torque = KP_ROT * _rotvec_delta_to_rot_error(delta_rotvec)
-    torque = [0, 0, 0 ,0]
- 
-    force  = np.clip(force,  -WAM_FORCE_LIMIT,  WAM_FORCE_LIMIT)
-    torque = np.clip(torque, -WAM_TORQUE_LIMIT, WAM_TORQUE_LIMIT)
- 
-    return np.concatenate([force, torque, [gripper]])
- 
-
-
 class UdpRunner(BaseRunner):
     def __init__(self,
                  output_dir: str,
@@ -139,13 +99,19 @@ class UdpRunner(BaseRunner):
         self.DOF = dof
         self.loop_hz = loop_hz
         self.debug = debug
+        self.dt = 1/self.loop_hz
 
         self.n_obs_steps = n_obs_steps
         self.n_action_steps = n_action_steps
         self.horizon = horizon
         self.obs_history = collections.deque(maxlen=self.n_obs_steps)
-        self.obs_timestamps = collections.deque(maxlen=self.n_obs_steps)
         self.past_actions = None
+
+        self.send_interval = 0.4  # send interpolated points for 3 seconds
+        self.last_send_time = 0.0
+
+        self.inference_time = 1.0          # estimate of how long inf takes
+        self.inference_time_alpha = 0.2    # EMA smoothing factor for the estimate
  
         # UDP comms - same helper classes used in main.py
         self.listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
@@ -286,10 +252,11 @@ class UdpRunner(BaseRunner):
             device = policy.device
             dtype = policy.dtype
 
-            loop_delay = 1 / self.loop_hz
             waiting_counter = 0
+            t_start = time.monotonic()
+            iter_idx = 0
             while self.system_running:
-                loop_start_time = time.time()
+                t_cycle_end = t_start + (iter_idx + 1) * self.dt
 
                 self._poll_joystick()
 
@@ -299,7 +266,13 @@ class UdpRunner(BaseRunner):
 
                 if not state_status:
                     if waiting_counter == 10:
-                        cprint("waiting for messages", "yellow")
+                        cprint("waiting for wam", "yellow")
+                        waiting_counter = 0
+                    waiting_counter += 1
+                    continue
+                if not img_status:
+                    if waiting_counter == 10:
+                        cprint("waiting for img", "yellow")
                         waiting_counter = 0
                     waiting_counter += 1
                     continue
@@ -314,12 +287,6 @@ class UdpRunner(BaseRunner):
                 gripper = state_dict["gripper_pos"]
                 timestamp_ns = state_dict["timestamp_ns"]
 
-                # clear queues if any observation is stale
-                if len(self.obs_history) > 0 and (timestamp_ns - self.obs_timestamps[0]) / 1e9 > self.n_obs_steps * loop_delay:
-                    self.obs_history.clear()
-                    self.obs_timestamps.clear()
-                    continue
-
 
                 state = np.concatenate([
                     jp,
@@ -332,8 +299,6 @@ class UdpRunner(BaseRunner):
                 obs["agent_pos"] = state
 
                 self.obs_history.append(obs)
-                self.obs_timestamps.append(timestamp_ns)
-
 
                 print("---------------------state")
                 print(list(state))
@@ -353,48 +318,44 @@ class UdpRunner(BaseRunner):
 
                 # run policy
                 if self.doing_inference and self.loop_state == "INFER":
-                    with torch.no_grad():
-                        action_dict = policy.predict_action(obs_dict, self.past_actions)
+                    time_to_chunk_end_s = obs["time_to_chunk_end_ns"] / 1e9
+                    interval_elapsed = (time.time() - self.last_send_time) >= self.send_interval
 
-                    # device_transfer
-                    np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
+                    should_infer = (time_to_chunk_end_s <= self.inference_time) and interval_elapsed
 
-                    action_chunk = np_action_dict['action'].squeeze(0)
-                    # action_chunk = np_action_dict['action_pred'].squeeze(0)
+                    if should_infer:
+                        t_infer_start = time.monotonic()
 
-                    print("---------------------wrench")
+                        with torch.no_grad():
+                            action_dict = policy.predict_action(obs_dict, self.past_actions)
 
-                    for action in action_chunk:
-                        print(list(action))
-                    print(timestamp_ns)
-                    print("---------------------\n\n")
+                        # device_transfer
+                        np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
 
-                    # wrench_chunk = np.stack(
-                    #     [delta_to_wrench(d) for d in action_chunk]
-                    # )
+                        action_chunk = np_action_dict['action'].squeeze(0)
+                        # action_chunk = np_action_dict['action_pred'].squeeze(0)
 
-                    # wrench_chunk = np.stack(
-                    #     [abs_to_wrench(d, state) for d in action_chunk]
-                    # )
+                        print("---------------------wrench")
 
-                    # execute_actions = action_chunk[:self.n_action_steps]
-                    # self.past_actions = np.array([action_chunk[self.n_action_steps-1:, :]])
-                    #
-                    # print("---------------------past")
-                    #
-                    # for action in self.past_actions[0]:
-                    #     print(list(action))
-                    # print("---------------------\n\n\n\n")
+                        for action in action_chunk:
+                            print(list(action))
+                        print(timestamp_ns)
+                        print("---------------------\n\n")
 
-                    # we will send along the time at which inference is started so that on the robot side we dont execute actions that are too old
-                    self.follower_sender.send_action_chunk(action_chunk, timestamp_ns)
-                    self.leader_sender.send_action_chunk(action_chunk, timestamp_ns)
+                        elapsed = time.monotonic() - t_infer_start
+                        self.inference_time = (
+                            self.inference_time_alpha * elapsed
+                            + (1 - self.inference_time_alpha) * self.inference_time
+                        )
 
-                # sleep, accounting for the time the loop already took to try and keep the desired frequency
-                elapsed_time = time.time() - loop_start_time
-                sleep_time = max(0.0, loop_delay - elapsed_time)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                        time_to_skip_ns = obs["time_to_chunk_end_ns"]
+                        self.follower_sender.send_action_chunk(action_chunk, time_to_skip_ns)
+                        self.leader_sender.send_action_chunk(action_chunk, time_to_skip_ns)
+
+                        self.last_send_time = time.time() # safety so we dont double infer on a similar state 
+
+                precise_wait(t_cycle_end)
+                iter_idx += 1
 
         except Exception as e:
             import traceback
