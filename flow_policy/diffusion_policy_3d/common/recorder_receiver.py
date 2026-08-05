@@ -16,8 +16,8 @@ class RecorderReceiver:
         # 'Q'  = time_to_chunk_end (ns)
         # 'Q'  = uint64_t (timestamp)
         # bytes: 544
-        num_doubles = (7 * self.dof) + 18
-        self.fmt = f"<{num_doubles}dQ"
+        num_doubles = (7 * self.dof) + 17
+        self.fmt = f"<{num_doubles}dQQ"
         self.packet_size = struct.calcsize(self.fmt)
 
         # Receiver Socket

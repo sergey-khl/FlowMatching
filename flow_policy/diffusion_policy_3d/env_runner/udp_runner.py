@@ -107,7 +107,7 @@ class UdpRunner(BaseRunner):
         self.obs_history = collections.deque(maxlen=self.n_obs_steps)
         self.past_actions = None
 
-        self.send_interval = 0.4  # send interpolated points for 3 seconds
+        self.send_interval = 0.1  # after sending dont do anythign for at least this amount of time
         self.last_send_time = 0.0
 
         self.inference_time = 1.0          # estimate of how long inf takes
@@ -203,6 +203,7 @@ class UdpRunner(BaseRunner):
         """'d' on keyboard / 'x' on joystick: stop any action sending."""
         if self.loop_state == "INFER":
             self.loop_state = "IDLE"
+            self.obs_history.clear()
 
             cprint("Press [R] or 'o' to start recording", "cyan")
     
@@ -282,12 +283,13 @@ class UdpRunner(BaseRunner):
 
                 obs = image_dict.copy()
 
-                ee = state_dict["follower_quat_wxyz"]
+                ee = state_dict["follower_cart_pos"]
                 jp = state_dict["follower_jp"]
                 # position = state_dict["follower_jp"]
                 rotation = quat_to_rotmat(state_dict["follower_quat_wxyz"])
                 # rotation = quat_to_quat(state_dict["follower_quat_wxyz"])
                 gripper = state_dict["gripper_pos"]
+                time_to_chunk_end_ns = state_dict["time_to_chunk_end_ns"]
                 timestamp_ns = state_dict["timestamp_ns"]
 
 
@@ -321,7 +323,7 @@ class UdpRunner(BaseRunner):
 
                 # run policy
                 if self.loop_state == "INFER":
-                    time_to_chunk_end_s = obs["time_to_chunk_end_ns"] / 1e9
+                    time_to_chunk_end_s = time_to_chunk_end_ns / 1e9
                     interval_elapsed = (time.time() - self.last_send_time) >= self.send_interval
 
                     should_infer = (time_to_chunk_end_s <= self.inference_time) and interval_elapsed
@@ -342,7 +344,6 @@ class UdpRunner(BaseRunner):
 
                         for action in action_chunk:
                             print(list(action))
-                        print(timestamp_ns)
                         print("---------------------\n\n")
 
                         elapsed = time.monotonic() - t_infer_start
@@ -350,10 +351,14 @@ class UdpRunner(BaseRunner):
                             self.inference_time_alpha * elapsed
                             + (1 - self.inference_time_alpha) * self.inference_time
                         )
+                        print(f"took {self.inference_time}")
+                        print(f"skipping {time_to_chunk_end_s}")
 
-                        time_to_skip_ns = obs["time_to_chunk_end_ns"]
+                        time_to_skip_ns = time_to_chunk_end_ns
                         self.follower_sender.send_action_chunk(action_chunk, time_to_skip_ns)
                         self.leader_sender.send_action_chunk(action_chunk, time_to_skip_ns)
+
+                        self.obs_history.clear() # fill with new data
 
                         self.last_send_time = time.time() # safety so we dont double infer on a similar state 
 
