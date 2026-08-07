@@ -46,7 +46,6 @@ class LabRealDataset(BaseDataset):
         ]
 
         self.img_keys = ["front_img", "wrist_img"]
-        # self.img_keys = ["wrist_img"]
 
         if self.has_pointclouds:
             buffer_keys.append("point_cloud")

@@ -1,6 +1,6 @@
-name: wam_pandp_solo_cup_2cam_weighted_jp-ee
+name: wam_pandp-solo-cup_nodmp_2cam_jp-ee
 
-task_name: wam_pandp_solo_cup_2cam_weighted_jp-ee
+task_name: wam_pandp-solo-cup_nodmp_2cam_jp-ee
 
 image_shape: &image_shape [3, 84, 84]
 
@@ -36,11 +36,10 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset
-  zarr_path: data_wam/wam_pandp_solo_cup_jp-ee.zarr
+  zarr_path: data_wam/wam_pandp-solo-cup-nodmp-100_jp-ee.zarr
   horizon: ${horizon}
   pad_before: ${eval:'${n_obs_steps}-1'}
   pad_after: ${eval:'${n_action_steps}-1'}
   seed: 42
   val_ratio: 0.0
   max_train_episodes: 90
-  weighted: True

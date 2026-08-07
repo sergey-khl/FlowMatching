@@ -56,6 +56,7 @@ policy:
     model_name: 'r3m'
     pretrained: True
     frozen: False
+    n_obs_steps: ${n_obs_steps}
 
     global_pool: ''
 

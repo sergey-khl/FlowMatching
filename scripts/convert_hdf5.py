@@ -9,6 +9,7 @@ import tqdm
 import zarr
 from termcolor import cprint
 from scipy.spatial.transform import Rotation as R
+from scipy.signal import savgol_filter
 
 has_images = True
 has_pointclouds = False
@@ -19,7 +20,9 @@ CHUNK_SIZE = 100
 POS_THRESHOLD = 0.0005
 ROT_THRESHOLD = 0.0002
 
-GRIPPER_ACTION_THRESHOLD = -0.01
+GRIPPER_ACTION_THRESHOLD = -0.15
+
+IMPORTANCE_POWER = 0  #  changes the spread of the traj_weight
  
 TARGET_FPS = 10
 TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
@@ -116,15 +119,20 @@ def preprocess_image(image):
 
 
 if __name__ == "__main__":
-    # expert_data_path = "/home/serg/projects/openpi-wam/dataset"
-    expert_data_path = "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp"
-    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/wam_pandp_solo_cup_jp-ee.zarr"
+    # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
+    # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
+    expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
+    # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
+    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/wam_pandp-solo-cup_dmp-100-0_jp-ee.zarr"
 
-    dirs = os.listdir(expert_data_path)
-    dirs = sorted(
-        [f for f in dirs if re.match(r"episode_.*\.h(?:df)?5$", f)],
-        key=lambda x: int(re.search(r"episode_(\d+).*\.h(?:df)?5$", x).group(1))
-    )
+    dirs = []
+    for path in expert_data_paths:
+        files = os.listdir(path)
+        files = sorted(
+            [f for f in files if re.match(r"episode_.*\.h(?:df)?5$", f)],
+            key=lambda x: int(re.search(r"episode_(\d+).*\.h(?:df)?5$", x).group(1))
+        )
+        dirs.extend([(path, f) for f in files])
 
     # storage
     total_count = 0
@@ -151,21 +159,20 @@ if __name__ == "__main__":
     os.makedirs(save_data_path, exist_ok=True)
     
     # check the first episode to see if we have images and point clouds
-    data = h5py.File(os.path.join(expert_data_path, dirs[0]), "r")
+    data = h5py.File(os.path.join(dirs[0][0], dirs[0][1]), "r")
 
-    for i, demo_dir in enumerate(dirs):
-
+    for i, (base_path, demo_dir) in enumerate(dirs):
         dir_name = os.path.dirname(demo_dir)
 
         cprint("Processing {}".format(demo_dir), "green")
         
-        data = h5py.File(os.path.join(expert_data_path, demo_dir), "r")
+        data = h5py.File(os.path.join(base_path, demo_dir), "r")
         low_dim = data["low_dim"]
 
         timestamps_ns = low_dim["timestamp_ns"][:]
-        jp = low_dim["follower_jp"][:]       # (N, 7)
-        cart_pos = low_dim["follower_cart_pos"][:]       # (N, 3)
-        cart_rot = low_dim["follower_quat_wxyz"][:]        # (N, 4) w,x,y,z
+        jp = low_dim["leader_jp"][:]       # (N, 7)
+        cart_pos = low_dim["leader_cart_pos"][:]       # (N, 3)
+        cart_rot = low_dim["leader_quat_wxyz"][:]        # (N, 4) w,x,y,z
         gripper_pos = low_dim["gripper_pos"][:]           # (N,)
         policy_torque_scale = low_dim["policy_torque_scale"][:] # (N, 7)
         front_image = data["front_image"]                 # (N, H, W, 3)
@@ -192,6 +199,18 @@ if __name__ == "__main__":
 
         weight_sum = 0
         if has_weights:
+            # smooth torque scale across the episode (time axis) per-joint
+            window_length = min(11, len(idxs))
+            if window_length % 2 == 0:
+                window_length -= 1
+            polyorder = min(2, window_length - 1)
+
+            if window_length > polyorder:
+                policy_torque_scale_ds = savgol_filter(
+                    policy_torque_scale_ds, window_length=window_length,
+                    polyorder=polyorder, axis=0
+                )
+
             inverted_torques = 1 - policy_torque_scale_ds[:, 0:4]
             for j in range(len(idxs)):
                 weight_sum += np.sum(inverted_torques[j], axis=0)
@@ -200,6 +219,7 @@ if __name__ == "__main__":
         episode_len = 0
         prev_gripper_action = None
         noop_count = 0
+        episode_weight_arrays = []
 
         for j in range(len(idxs) - 1):
             # delta_pos = cart_pos_ds[j + 1] - cart_pos_ds[j]
@@ -227,12 +247,12 @@ if __name__ == "__main__":
                 # delta_pos,
                 jp_ds[j + 1],
                 # [gripper_action],
-                [gripper_pos_ds[j + 1]],
+                [gripper_action],
             ]).astype(np.float32)  # (7,)
  
             if has_weights:
                 weight_scale = len(idxs) / weight_sum
-                traj_weight_arrays.append(np.sum(inverted_torques[j], axis=0) * weight_scale)
+                episode_weight_arrays.append(np.sum(inverted_torques[j], axis=0) * weight_scale)
 
             state_arrays.append(state)
             action_arrays.append(action)
@@ -248,6 +268,14 @@ if __name__ == "__main__":
         else:
             print(f"[{demo_dir}]  Episode too short to form a single step.")
  
+        if has_weights:
+            episode_weights = np.array(episode_weight_arrays, dtype=np.float64)
+            total = episode_weights.sum()
+            spread = episode_weights ** IMPORTANCE_POWER
+            spread_sum = spread.sum()
+            episode_weights = spread * (total / spread_sum)
+            traj_weight_arrays.extend(episode_weights)
+
         episode_ends_arrays.append(total_count + episode_len)
         total_count += episode_len
         

@@ -283,11 +283,10 @@ class UdpRunner(BaseRunner):
 
                 obs = image_dict.copy()
 
-                ee = state_dict["follower_cart_pos"]
-                jp = state_dict["follower_jp"]
-                # position = state_dict["follower_jp"]
-                rotation = quat_to_rotmat(state_dict["follower_quat_wxyz"])
-                # rotation = quat_to_quat(state_dict["follower_quat_wxyz"])
+                ee = state_dict["leader_cart_pos"]
+                jp = state_dict["leader_jp"]
+                rotation = quat_to_rotmat(state_dict["leader_quat_wxyz"])
+                # rotation = quat_to_quat(state_dict["leader_quat_wxyz"])
                 gripper = state_dict["gripper_pos"]
                 time_to_chunk_end_ns = state_dict["time_to_chunk_end_ns"]
                 timestamp_ns = state_dict["timestamp_ns"]
@@ -295,8 +294,8 @@ class UdpRunner(BaseRunner):
 
                 state = np.concatenate([
                     jp,
-                    # ee,
-                    # rotation,
+                    ee,
+                    rotation,
                     [gripper],
                     # [-gripper],
                 ]).astype(np.float32)  # (8,)
