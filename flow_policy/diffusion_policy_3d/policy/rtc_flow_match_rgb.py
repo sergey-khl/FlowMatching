@@ -5,7 +5,6 @@ from typing import Dict
 
 import hydra
 import numpy as np
-import pytorch3d.ops as torch3d_ops
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

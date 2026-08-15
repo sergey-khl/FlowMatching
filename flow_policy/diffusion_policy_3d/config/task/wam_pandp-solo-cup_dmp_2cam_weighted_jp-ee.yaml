@@ -36,7 +36,7 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset
-  zarr_path: data_wam/wam_pandp-solo-cup_dmp-100-4_jp-ee.zarr
+  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_dmp-100-1_jp-ee.zar
   horizon: ${horizon}
   pad_before: ${eval:'${n_obs_steps}-1'}
   pad_after: ${eval:'${n_action_steps}-1'}

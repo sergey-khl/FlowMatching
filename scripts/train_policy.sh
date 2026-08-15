@@ -1,31 +1,22 @@
-# Examples:
-# bash scripts/train_policy.sh rtc_flow_match franka_peartable_test 0322 0 0
-# bash scripts/train_policy.sh dp3 adroit_hammer 0322 0 0
-# bash scripts/train_policy.sh dp3 dexart_laptop 0322 0 0
-# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_1cam_weighted_jp 0001 0 0
-# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_2cam_weighted_jp 0001 0 0
-# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_1cam_jp 0001 0 0
-# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_2cam_jp 0001 0 0
-# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_nodmp_solo_cup_1cam_jp 0001 0 0
-# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_nodmp_solo_cup_2cam_jp-ee 0001 0 0
-# bash scripts/train_policy.sh rtc_flow_match_rgb wam_pandp_solo_cup_2cam_weighted_jp-ee 0001 0 0
+# bash scripts/train_policy.sh train_dg_dagger dg_dagger_rgb wam_pandp-solo-cup_dmp_2cam_weighted_jp-ee 0001 0 0
 
 
 
 DEBUG=False
 save_ckpt=True
 
-alg_name=${1}
-task_name=${2}
+workspace_name=${1}
+alg_name=${2}
+task_name=${3}
 config_name=${alg_name}
-addition_info=${3}
-seed=${4}
+addition_info=${4}
+seed=${5}
 exp_name=${task_name}-${alg_name}-${addition_info}
 run_dir="data/outputs/${exp_name}_seed${seed}"
 
 
 # gpu_id=$(bash scripts/find_gpu.sh)
-gpu_id=${5}
+gpu_id=${6}
 echo -e "\033[33mgpu id (to use): ${gpu_id}\033[0m"
 
 
@@ -45,7 +36,7 @@ cd flow_policy
 
 export HYDRA_FULL_ERROR=1 
 export CUDA_VISIBLE_DEVICES=${gpu_id}
-python train.py --config-name=${config_name}.yaml \
+python diffusion_policy_3d/workspace/${workspace_name}.py --config-name=${config_name}.yaml \
                             task=${task_name} \
                             hydra.run.dir=${run_dir} \
                             training.debug=$DEBUG \
@@ -54,7 +45,3 @@ python train.py --config-name=${config_name}.yaml \
                             exp_name=${exp_name} \
                             logging.mode=${wandb_mode} \
                             checkpoint.save_ckpt=${save_ckpt}
-
-
-
-                                

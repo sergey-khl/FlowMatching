@@ -163,11 +163,11 @@ class ConditionalUnet1D(nn.Module):
                 kernel_size=kernel_size, n_groups=n_groups,
                 condition_type=condition_type
             ),
-            # ConditionalResidualBlock1D(
-            #     mid_dim, mid_dim, cond_dim=cond_dim,
-            #     kernel_size=kernel_size, n_groups=n_groups,
-            #     condition_type=condition_type
-            # ),
+            ConditionalResidualBlock1D(
+                mid_dim, mid_dim, cond_dim=cond_dim,
+                kernel_size=kernel_size, n_groups=n_groups,
+                condition_type=condition_type
+            ),
         ])
 
         down_modules = nn.ModuleList([])

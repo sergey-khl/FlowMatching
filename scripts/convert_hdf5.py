@@ -22,7 +22,7 @@ ROT_THRESHOLD = 0.0002
 
 GRIPPER_ACTION_THRESHOLD = -0.15
 
-IMPORTANCE_POWER = 0  #  changes the spread of the traj_weight
+IMPORTANCE_POWER = 1  #  changes the spread of the traj_weight
  
 TARGET_FPS = 10
 TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
@@ -121,9 +121,9 @@ def preprocess_image(image):
 if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
-    expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
+    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
-    save_data_path = "/home/serg/projects/FlowMatching/flow_policy/data_wam/wam_pandp-solo-cup_dmp-100-0_jp-ee.zarr"
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_dmp-100-{IMPORTANCE_POWER}_jp-ee.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -144,6 +144,7 @@ if __name__ == "__main__":
     action_arrays = []
     episode_ends_arrays = []
     traj_weight_arrays = []
+    ext_torque_arrays = []
 
     if os.path.exists(save_data_path):
         cprint("Data already exists at {}".format(save_data_path), "red")
@@ -177,6 +178,7 @@ if __name__ == "__main__":
         policy_torque_scale = low_dim["policy_torque_scale"][:] # (N, 7)
         front_image = data["front_image"]                 # (N, H, W, 3)
         wrist_image = data["wrist_image"]
+        ext_torque = low_dim["leader_ext_torque"][:]        # (N, 4) w,x,y,z
 
         t0, t1 = timestamps_ns[0], timestamps_ns[-1]
         target_times = np.arange(t0, t1 + 1, TARGET_DT_NS)
@@ -190,6 +192,7 @@ if __name__ == "__main__":
         front_img_ds = front_image[idxs]
         wrist_img_ds = wrist_image[idxs]
         policy_torque_scale_ds = policy_torque_scale[idxs]
+        ext_torque_ds = ext_torque[idxs]
 
         # rotvec_ds = quats_to_rotvec(cart_rot_ds)
         # euler_ds = quats_to_euler(cart_rot_ds)
@@ -258,6 +261,7 @@ if __name__ == "__main__":
             action_arrays.append(action)
             front_img_arrays.append(preprocess_image(front_img_ds[j]))
             wrist_img_arrays.append(preprocess_image(wrist_img_ds[j]))
+            ext_torque_arrays.append(ext_torque_ds[j])
  
             prev_gripper_action = gripper_action
             episode_len += 1
@@ -302,6 +306,7 @@ if __name__ == "__main__":
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
     episode_ends_arrays = np.array(episode_ends_arrays)
+    ext_torque_arrays = np.stack(ext_torque_arrays, axis=0)
 
     compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
     if has_images:
@@ -337,6 +342,9 @@ if __name__ == "__main__":
         action_chunk_size = (CHUNK_SIZE, action_arrays.shape[1], action_arrays.shape[2])
     else:
         raise NotImplementedError
+
+    # NOTE: assuming 7dof robot
+    ext_torque_chunk_size = (CHUNK_SIZE, 7)
     
     if has_images:
         zarr_data.create_dataset(
@@ -399,6 +407,14 @@ if __name__ == "__main__":
         overwrite=True,
         compressor=compressor,
     )
+    zarr_data.create_dataset(
+        "ext_torque",
+        data=ext_torque_arrays,
+        chunks=ext_torque_chunk_size,
+        dtype="float32",
+        overwrite=True,
+        compressor=compressor,
+    )
 
 
     # print shape
@@ -434,6 +450,10 @@ if __name__ == "__main__":
     )
     cprint(
         f"episode_ends shape: {episode_ends_arrays.shape}, range: [{np.min(episode_ends_arrays)}, {np.max(episode_ends_arrays)}]",
+        "green",
+    )
+    cprint(
+        f"ext_torque shape: {ext_torque_arrays.shape}, range: [{np.min(ext_torque_arrays)}, {np.max(ext_torque_arrays)}]",
         "green",
     )
     cprint(f"total_count: {total_count}", "green")
