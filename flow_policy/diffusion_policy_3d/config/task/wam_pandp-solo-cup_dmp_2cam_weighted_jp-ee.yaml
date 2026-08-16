@@ -16,6 +16,9 @@ shape_meta: &shape_meta
     agent_pos:
       shape: [17] # [...7dofjp, ...ee pos, ...2x3 rows of rotation matrix, gripper pos]
       type: low_dim
+    ext_torque:
+      shape: [7]
+      type: low_dim
   action:
     shape: [15]
 

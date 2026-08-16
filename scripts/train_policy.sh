@@ -2,6 +2,9 @@
 # bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_pandp-solo-cup_dmp_2cam_weighted_jp-ee 0001 0 0
 # bash scripts/train_policy.sh train_flow_matching rtc_match_rgb wam_pandp-solo-cup_dmp_2cam_weighted_jp-ee 0001 0 0
 
+# BEFORE RUNNING:
+# collect data at 500 hz or at least 100. base willl run at 10hz and res at 50
+# collect img timestamps
 
 
 DEBUG=False

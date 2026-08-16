@@ -46,6 +46,7 @@ class LabRealDataset(BaseDataset):
         ]
 
         self.img_keys = ["front_img", "wrist_img"]
+        self.torque_keys = ["ext_torque"]
 
         if self.has_pointclouds:
             buffer_keys.append("point_cloud")
@@ -54,6 +55,8 @@ class LabRealDataset(BaseDataset):
                 buffer_keys.append(key)
         if self.weighted:
             buffer_keys.append("traj_weight")
+        for key in self.torque_keys:
+            buffer_keys.append(key)
 
         self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=buffer_keys)
 
@@ -89,6 +92,7 @@ class LabRealDataset(BaseDataset):
         return val_set
 
     def get_normalizer(self, mode="limits", **kwargs):
+        # TOOO: check that this is right
         data = {"action": self.replay_buffer["action"], "agent_pos": self.replay_buffer["state"][..., :]}
         normalizer = LinearNormalizer()
         normalizer.fit(data=data, last_n_dims=1, mode=mode, **kwargs)
@@ -102,6 +106,8 @@ class LabRealDataset(BaseDataset):
             
         if self.weighted:
             normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
+
+        normalizer["ext_torque"] = SingleFieldLinearNormalizer.create_identity()
 
         return normalizer
 
@@ -132,6 +138,9 @@ class LabRealDataset(BaseDataset):
         if self.weighted:
             weights = sample['traj_weight'][:,].astype(np.float32)
             data["weights"] = weights
+    
+        for key in self.torque_keys:
+            data["obs"][key] = sample[key]
 
         return data
 

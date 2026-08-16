@@ -37,8 +37,9 @@ class ForceEncoder(nn.Module):
         super().__init__()
         self.z_dim = z_dim
 
+        # assuming 7 dim torque input from each joint. not wrench
         self.frc_encoder = nn.Sequential(
-            CausalConv1D(6, 16, kernel_size=2, stride=2),
+            CausalConv1D(7, 16, kernel_size=2, stride=2),
             nn.LeakyReLU(0.1, inplace=True),
             CausalConv1D(16, 32, kernel_size=2, stride=2),
             nn.LeakyReLU(0.1, inplace=True),

@@ -65,8 +65,8 @@ policy:
       # model_name: 'resnet34.a1_in1k'
       model_name: 'vit_base_patch32_clip_224.openai'
       # model_name: 'convnext_base.clip_laion2b_augreg_ft_in12k'
-      pretrained: True
-      frozen: True
+      pretrained: False
+      frozen: False
       global_pool: ''
 
       # 'avg' or 'max' or 'soft_attention' or 'spatial_embedding' or 'transformer' or 'attention_pool_2d'
@@ -112,7 +112,7 @@ policy:
     
     force_encoder_cfg:
       model_name: causalconv
-      feature_dim: 384
+      feature_dim: 448
       frozen: False
       pretrained: False
       use_group_norm: False

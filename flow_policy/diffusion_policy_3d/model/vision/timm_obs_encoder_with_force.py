@@ -227,7 +227,7 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
                 key_model_map[key] = vision_encoder
                 key_transform_map[key] = vision_transform
             elif type == "low_dim":
-                if "wrench" in key:
+                if "wrench" in key or "torque" in key:
                     print("key_model_map adding wrench key:", key)
                     wrench_keys.append(key)
 
@@ -247,8 +247,10 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
 
         rgb_keys = sorted(rgb_keys)
         low_dim_keys = sorted(low_dim_keys)
+        wrench_keys = sorted(wrench_keys)
         print("rgb keys:         ", rgb_keys)
         print("low_dim_keys keys:", low_dim_keys)
+        print("wrench_keys keys:", wrench_keys)
 
         self.vision_encoder_cfg = vision_encoder_cfg
         self.force_encoder_cfg = force_encoder_cfg
@@ -416,6 +418,7 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
             features.append(feature.reshape(B, -1))
             modality_features.append(feature.reshape(B, T, -1))
             enc_dict[key] = feature.reshape(B, T, -1)
+
 
         for key in self.wrench_keys:
             data = obs_dict[key]
