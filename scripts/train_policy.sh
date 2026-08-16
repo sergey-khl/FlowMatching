@@ -1,4 +1,6 @@
 # bash scripts/train_policy.sh train_dg_dagger dg_dagger_rgb wam_pandp-solo-cup_dmp_2cam_weighted_jp-ee 0001 0 0
+# bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_pandp-solo-cup_dmp_2cam_weighted_jp-ee 0001 0 0
+# bash scripts/train_policy.sh train_flow_matching rtc_match_rgb wam_pandp-solo-cup_dmp_2cam_weighted_jp-ee 0001 0 0
 
 
 
