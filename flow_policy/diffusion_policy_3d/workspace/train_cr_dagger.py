@@ -141,6 +141,8 @@ class TrainCrDaggerWorkspace(BaseWorkspace):
             ema = hydra.utils.instantiate(
                 cfg.ema,
                 model=self.ema_model)
+
+        os.makedirs(self.output_dir, exist_ok=True)
         
         cfg.logging.name = str(cfg.logging.name)
         cprint("-----------------------------", "yellow")

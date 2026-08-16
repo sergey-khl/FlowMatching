@@ -142,6 +142,8 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
                 cfg.ema,
                 model=self.ema_model)
         
+        os.makedirs(self.output_dir, exist_ok=True)
+
         cfg.logging.name = str(cfg.logging.name)
         cprint("-----------------------------", "yellow")
         cprint(f"[WandB] group: {cfg.logging.group}", "yellow")

@@ -132,15 +132,7 @@ class TrainFlowMatchingWorkspace(BaseWorkspace):
                 cfg.ema,
                 model=self.ema_model)
 
-        # NOTE: I removed env_runner from train because im lazy :)
-        # # configure env
-        # env_runner: BaseRunner
-        # env_runner = hydra.utils.instantiate(
-        #     cfg.task.env_runner,
-        #     output_dir=self.output_dir)
-        #
-        # if env_runner is not None:
-        #     assert isinstance(env_runner, BaseRunner)
+        os.makedirs(self.output_dir, exist_ok=True)
         
         cfg.logging.name = str(cfg.logging.name)
         cprint("-----------------------------", "yellow")

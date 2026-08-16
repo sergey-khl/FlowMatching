@@ -13,6 +13,7 @@ class MLP(nn.Module):
         self.hidden_layers = nn.ModuleList()
         for i in range(len(hidden_dims)-1):
             self.hidden_layers.append(nn.Linear(hidden_dims[i], hidden_dims[i+1]))
+        self.action_dim = action_dim
         self.action_horizon = action_horizon
         self.output_layer = nn.Linear(hidden_dims[-1], action_dim * action_horizon)
         self.activation = nn.GELU()
