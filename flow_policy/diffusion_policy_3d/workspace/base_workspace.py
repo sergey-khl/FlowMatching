@@ -15,9 +15,9 @@ class BaseWorkspace:
     include_keys = tuple()
     exclude_keys = tuple()
 
-    def __init__(self, cfg: OmegaConf, output_dir: Optional[str]=None):
+    def __init__(self, cfg: OmegaConf):
         self.cfg = cfg
-        self._output_dir = output_dir
+        self._output_dir = cfg.output_dir
         self._saving_thread = None
 
     @property

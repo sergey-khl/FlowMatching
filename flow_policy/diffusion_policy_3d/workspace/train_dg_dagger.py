@@ -42,11 +42,11 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
     include_keys = ['global_step', 'epoch']
     exclude_keys = tuple()
 
-    def __init__(self, cfg: OmegaConf, output_dir=None):
-        super().__init__(cfg, output_dir=output_dir)
+    def __init__(self, cfg: OmegaConf):
+        super().__init__(cfg)
 
         self.cfg = cfg
-        self._output_dir = output_dir
+        self._output_dir = cfg.output_dir
         self._saving_thread = None
         
         # set seed
@@ -146,6 +146,7 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
         cprint("-----------------------------", "yellow")
         cprint(f"[WandB] group: {cfg.logging.group}", "yellow")
         cprint(f"[WandB] name: {cfg.logging.name}", "yellow")
+        cprint(f"[WandB] config: {self.output_dir}", "yellow")
         cprint("-----------------------------", "yellow")
         # configure logging
         wandb_run = wandb.init(
@@ -229,7 +230,7 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
                         'train_loss': raw_loss_cpu,
                         'unet_loss': loss_dict["bc_loss"],
                         'base_loss': loss_dict["base_loss"],
-                        'corr_loss': loss_dict["corr_loss"],
+                        'corrected_loss': loss_dict["corrected_loss"],
                         'scale_loss': loss_dict["scale_loss"],
                         'global_step': self.global_step,
                         'epoch': self.epoch,

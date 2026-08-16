@@ -47,6 +47,7 @@ class DgDaggerRGB(BasePolicy):
         weighted_loss=False,
         batched_weights=False,
         correction_thresh=1.0,
+        scale_loss_weight=1.0,
         max_delay=4,
         # parameters passed to step
         **kwargs,
@@ -153,6 +154,8 @@ class DgDaggerRGB(BasePolicy):
         self.kwargs = kwargs
         self.weighted_loss = weighted_loss
         self.batched_weights = batched_weights
+        self.correction_thresh = correction_thresh
+        self.scale_loss_weight = scale_loss_weight
         self.max_delay = max_delay
 
         self.num_inference_steps = num_inference_steps

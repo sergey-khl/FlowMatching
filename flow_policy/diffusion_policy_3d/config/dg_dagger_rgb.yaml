@@ -3,6 +3,7 @@ defaults:
 
 name: train_dg_dagger
 
+output_dir: /mnt/10tb/serg/FlowMatching/outputs
 
 task_name: ${task.name}
 shape_meta: ${task.shape_meta}
@@ -29,6 +30,7 @@ policy:
   weighted_loss: false
   batched_weights: false
   correction_thresh: 1.0
+  scale_loss_weight: 1.0
 
   mlp_cfg:
     action_horizon: ${horizon}
@@ -206,14 +208,14 @@ checkpoint:
   tag: 300 # which checkpoint to load for eval, one of [latest | best | <epoch>]
 
 multi_run:
-  run_dir: /mnt/10tb/serg/FlowMatching/data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+  run_dir: ${output_dir}/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
   wandb_name_base: ${now:%Y.%m.%d-%H.%M.%S}_${name}_${task_name}
 
 hydra:
   job:
     override_dirname: ${name}
   run:
-    dir: /mnt/10tb/serg/FlowMatching/data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+    dir: ${output_dir}/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
   sweep:
-    dir: /mnt/10tb/serg/FlowMatching/data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+    dir: ${output_dir}/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
     subdir: ${hydra.job.num}
