@@ -2,7 +2,7 @@ name: wam_pandp-solo-cup_nodmp_2cam_jp-ee
 
 task_name: wam_pandp-solo-cup_nodmp_2cam_jp-ee
 
-image_shape: &image_shape [3, 84, 84]
+image_shape: &image_shape [3, 224, 224]
 
 shape_meta: &shape_meta
   # acceptable types: rgb, low_dim
@@ -15,9 +15,9 @@ shape_meta: &shape_meta
         type: rgb
     agent_pos:
       shape: [17] # [...7dofjp, ...ee pos, ...2x3 rows of rotation matrix, gripper pos]
-      type: low_dimx
+      type: low_dim
   action:
-    shape: [8]
+    shape: [15]
 
 env_runner:
   _target_: diffusion_policy_3d.env_runner.udp_runner.UdpRunner

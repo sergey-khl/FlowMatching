@@ -107,7 +107,7 @@ def zero_noop_axes(delta_pos, delta_rot):
 
 
 def preprocess_image(image):
-    img_size = 84
+    img_size = 224
 
     image = image.astype(np.float32)
     image = torch.from_numpy(image).cuda()
@@ -249,6 +249,7 @@ if __name__ == "__main__":
                 # quats_ds[j + 1],
                 # delta_pos,
                 jp_ds[j + 1],
+                ext_torque_ds[j + 1],
                 # [gripper_action],
                 [gripper_action],
             ]).astype(np.float32)  # (7,)

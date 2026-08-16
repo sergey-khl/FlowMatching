@@ -29,6 +29,12 @@ policy:
   weighted_loss: false
   batched_weights: false
   correction_thresh: 1.0
+
+  mlp_cfg:
+    action_horizon: ${horizon}
+    hidden_dims: [256, 256, 256]
+    dropout: 0.1
+
   
   diffusion_step_embed_dim: 128
   down_dims:
@@ -36,8 +42,8 @@ policy:
   - 256
   - 512
   crop_shape:
-  - 80
-  - 80
+  - 224
+  - 224
   horizon: ${horizon}
   kernel_size: 5
   n_action_steps: ${n_action_steps}
@@ -57,6 +63,8 @@ policy:
     shape_meta: ${shape_meta}
     fuse_mode: modality-attention
     reduce_pretrained_lr: True
+    n_obs_steps: ${n_obs_steps}
+
 
     ##### from scratch #####
     # model_name: 'vit_base_patch16_224'

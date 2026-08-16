@@ -30,6 +30,7 @@ class DgDaggerRGB(BasePolicy):
         horizon,
         n_action_steps,
         n_obs_steps,
+        mlp_cfg,
         num_inference_steps=10,
         obs_as_global_cond=True,
         diffusion_step_embed_dim=256,
@@ -99,10 +100,9 @@ class DgDaggerRGB(BasePolicy):
 
         self.scale_predictor = MLP(
             input_dim=obs_feature_dim,
-            action_dim=cfg.model.action_dim,
-            action_horizon=cfg.model.action_horizon,
-            hidden_dims=cfg.model.hidden_dims,
-            dropout=cfg.model.dropout,
+            action_horizon=mlp_cfg.action_horizon,
+            hidden_dims=mlp_cfg.hidden_dims,
+            dropout=mlp_cfg.dropout,
         )
 
         self.base_unet = ConditionalUnet1D(
