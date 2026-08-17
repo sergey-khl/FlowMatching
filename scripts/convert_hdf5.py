@@ -24,8 +24,12 @@ GRIPPER_ACTION_THRESHOLD = -0.15
 
 IMPORTANCE_POWER = 1  #  changes the spread of the traj_weight
  
+# TODO: set 50
 TARGET_FPS = 10
 TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
+
+IMG_TARGET_FPS = 10
+IMG_TARGET_DT_NS = int(1e9 / IMG_TARGET_FPS)
 
 def find_nearest_index(timestamps, target_time):
     """Return index of the timestamp closest to target_time."""

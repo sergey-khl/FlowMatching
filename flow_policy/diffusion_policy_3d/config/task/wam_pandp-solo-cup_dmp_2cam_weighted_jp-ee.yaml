@@ -19,6 +19,9 @@ shape_meta: &shape_meta
     ext_torque:
       shape: [7]
       type: low_dim
+    policy:
+      shape: [7] # last policy jp
+      type: low_dim
   action:
     shape: [15]
 
@@ -38,11 +41,37 @@ env_runner:
   horizon: ${horizon}
 
 dataset:
-  _target_: diffusion_policy_3d.dataset.lab_real_dataset.LabRealDataset
+  _target_: diffusion_policy_3d.dataset.lab_real_async_dataset.LabRealAsyncDataset
   zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_dmp-100-1_jp-ee.zarr
-  horizon: ${horizon}
-  pad_before: ${eval:'${n_obs_steps}-1'}
-  pad_after: ${eval:'${n_action_steps}-1'}
+  action_horizon: ${n_action_steps}
+  action_padding: False
+  obs_key_horizons:
+    state:
+      horizon: 3
+      down_sample_steps: 5
+      source: low_dim
+    ext_torque:
+      horizon: 32
+      down_sample_steps: 4
+      source: low_dim
+    policy:
+      horizon: 6
+      down_sample_steps: 50
+      source: low_dim
+    front_img:
+      horizon: ${n_obs_steps}
+      down_sample_steps: 1
+      source: img
+    wrist_img:
+      horizon: ${n_obs_steps}
+      down_sample_steps: 1
+      source: img
+  corrections:
+    enabled: True        # u
+    threshold: 1.0        # norm(ext_torque) that counts as a "spike"
+    weight: 3              # duplicate each flagged query 3x (their weighted_sampling)
+    horizon: 5              # + 5 extra query points after each onset (their correction_horizon)
+    horizon_stride: 1
   seed: 42
   val_ratio: 0.0
   max_train_episodes: 90

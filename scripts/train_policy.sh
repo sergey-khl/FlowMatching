@@ -5,6 +5,45 @@
 # BEFORE RUNNING:
 # collect data at 500 hz or at least 100. base willl run at 10hz and res at 50
 # collect img timestamps
+# torque is moving average with removed offset
+# https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/workspace/train_residual_mlp_workspace.py#L51
+# ^^ to load base policy checkpoint
+# rc jp actoins should be diffs to match
+#
+#
+# NOTES:
+# pose9wrench6 is used. action dim 15
+# https://github.com/yifan-hou/cr-dagger/blob/main/PyriteConfig/tasks/common/common_type_conversions.py#L454
+# they have a virtual target estimator which puts the torques with params to get a stiffness estimate without MLP.
+# not used in their online config
+#
+# they already are doing some diffusion with their residual idea: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/diffusion_transformer_timm_policy.py#L13
+# and exporing how to use the latent space: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/bet_lowdim_policy.py
+# https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/model/bet/latent_generators/mingpt.py
+#
+# ACTION:
+    # last residual is used as diff with current 
+    # find the closest policy command before or at the timestamp of the robot command
+    # action: trim to the shortest length
+    # action time is according to low_dim ts
+# OBS
+    # can include item poses but does not
+    # includes policy with timestamps
+    # includes target and stiffness in the non online version
+    # paper says predicts 15 dim so i am guessing they used the online version in which case no target and no gripper
+# training
+    # done on corrections only
+    # WeightedRandomSampler
+# normalization
+    # have an identity over rotmat. should consider if getting bad results 
+    #
+
+# TODO
+# see how https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/diffusion_unet_timm_mod1_policy.py#L30
+# is different from the other diffusions. also how the transformer_obs_encoder
+
+
+
 
 
 DEBUG=False
