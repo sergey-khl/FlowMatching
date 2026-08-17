@@ -5,10 +5,11 @@
 # BEFORE RUNNING:
 # collect data at 500 hz or at least 100. base willl run at 10hz and res at 50
 # collect img timestamps
-# torque is moving average with removed offset
+# torque is ema at 500 windows with removed offset
 # https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/workspace/train_residual_mlp_workspace.py#L51
 # ^^ to load base policy checkpoint
 # rc jp actoins should be diffs to match
+# add correction_only flag to tell if we are only loading around correction
 #
 #
 # NOTES:
@@ -16,6 +17,11 @@
 # https://github.com/yifan-hou/cr-dagger/blob/main/PyriteConfig/tasks/common/common_type_conversions.py#L454
 # they have a virtual target estimator which puts the torques with params to get a stiffness estimate without MLP.
 # not used in their online config
+#
+# didnt see a base policy. will assume its just rtc flow matching without corrections
+#
+# num_of_new_episodes is 0 in https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/online_learning/configs/config_v1.py#L50
+# can ignore new_episode_prob. it gets used when new episode data is available with load_new_episodes. it means there is a chance the new episode gets considered
 #
 # they already are doing some diffusion with their residual idea: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/diffusion_transformer_timm_policy.py#L13
 # and exporing how to use the latent space: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/bet_lowdim_policy.py
@@ -41,6 +47,11 @@
 # TODO
 # see how https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/diffusion_unet_timm_mod1_policy.py#L30
 # is different from the other diffusions. also how the transformer_obs_encoder
+#
+# cr vs dg differences
+# no ft sensor so force encoder input dim is 7.
+# predicting ext_torque from joints
+# using the traj_weight signal for determening correction
 
 
 
