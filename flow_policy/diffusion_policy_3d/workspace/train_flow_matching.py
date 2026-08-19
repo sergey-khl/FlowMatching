@@ -191,6 +191,17 @@ class TrainFlowMatchingWorkspace(BaseWorkspace):
                     
                     t1_2 = time.time()
 
+                    grads = [
+                        param.grad.detach().flatten()
+                        for param in self.model.parameters()
+                        if param.grad is not None
+                    ]
+                    grad_norm = (
+                        torch.cat(grads).norm()
+                        if len(grads) > 0
+                        else 0
+                    )
+
                     # step optimizer
                     if self.global_step % cfg.training.gradient_accumulate_every == 0:
                         self.optimizer.step()

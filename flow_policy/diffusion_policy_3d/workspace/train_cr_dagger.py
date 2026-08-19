@@ -202,6 +202,17 @@ class TrainCrDaggerWorkspace(BaseWorkspace):
                     
                     t1_2 = time.time()
 
+                    grads = [
+                        param.grad.detach().flatten()
+                        for param in self.model.parameters()
+                        if param.grad is not None
+                    ]
+                    grad_norm = (
+                        torch.cat(grads).norm()
+                        if len(grads) > 0
+                        else 0
+                    )
+
                     # step optimizer
                     if self.global_step % cfg.training.gradient_accumulate_every == 0:
                         self.optimizer.step()
@@ -216,17 +227,6 @@ class TrainCrDaggerWorkspace(BaseWorkspace):
                     raw_loss_cpu = raw_loss.item()
                     tepoch.set_postfix(loss=raw_loss_cpu, refresh=False)
                     train_losses.append(raw_loss_cpu)
-
-                    grads = [
-                        param.grad.detach().flatten()
-                        for param in self.model.parameters()
-                        if param.grad is not None
-                    ]
-                    grad_norm = (
-                        torch.cat(grads).norm()
-                        if len(grads) > 0
-                        else 0
-                    )
 
                     step_log = {
                         'train_loss': raw_loss_cpu,

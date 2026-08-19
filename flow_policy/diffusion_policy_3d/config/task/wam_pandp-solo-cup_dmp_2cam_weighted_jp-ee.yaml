@@ -24,6 +24,40 @@ shape_meta: &shape_meta
       type: low_dim
   action:
     shape: [15]
+  sample:
+    # (ms) time held free at the end of each episode so every sparse query still has room for its full action horizon.
+    training_duration_per_sparse_query: 200
+    obs:
+      sparse:
+        # down_sample_steps: how many raw steps to skip in that key's own channel
+        # horizon: how many downsampled steps to look back, for this usage
+        # low dim data is 500hz (https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/online_learning/configs/config_v1.py#L18) and img data is 60hz (https://github.com/yifan-hou/cr-dagger/blob/main/PyriteUtility/PyriteUtility/hardware_interface/multi_uvc_camera.py).
+        # how long things take = (down_sample_steps * (horizon - 1))/hz
+        agent_pos: # last 0.02s of low_dim
+          horizon: 3
+          down_sample_steps: 5
+          source: low_dim
+        ext_torque: # last 0.248s of low_dim
+          horizon: 32
+          down_sample_steps: 4
+          source: low_dim
+        policy_cmd: # last 0.5s of base policy jp
+          horizon: 6
+          down_sample_steps: 50
+          source: low_dim
+        front_img: # just use 1 image
+          horizon: ${n_obs_steps}
+          down_sample_steps: 1 # NOTE: this will likely have to change if horizon is not 1
+          source: img
+        wrist_img:
+          horizon: ${n_obs_steps}
+          down_sample_steps: 1
+          source: img
+    action:
+      sparse:
+        horizon: ${n_action_steps}
+        down_sample_steps: 10
+
 
 env_runner:
   _target_: diffusion_policy_3d.env_runner.udp_runner.UdpRunner
@@ -42,37 +76,19 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_async_dataset.LabRealAsyncDataset
-  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_dmp-100-1_jp-ee.zarr
-  action_horizon: ${n_action_steps}
+  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_dmp-100-1.zarr
+  shape_meta: *shape_meta
   action_padding: False
-  obs_key_horizons:
-    state:
-      horizon: 3
-      down_sample_steps: 5
-      source: low_dim
-    ext_torque:
-      horizon: 32
-      down_sample_steps: 4
-      source: low_dim
-    policy:
-      horizon: 6
-      down_sample_steps: 50
-      source: low_dim
-    front_img:
-      horizon: ${n_obs_steps}
-      down_sample_steps: 1
-      source: img
-    wrist_img:
-      horizon: ${n_obs_steps}
-      down_sample_steps: 1
-      source: img
-  corrections:
-    enabled: True        # u
-    threshold: 1.0        # norm(ext_torque) that counts as a "spike"
-    weight: 3              # duplicate each flagged query 3x (their weighted_sampling)
-    horizon: 5              # + 5 extra query points after each onset (their correction_horizon)
-    horizon_stride: 1
+  query_frequency_down_sample_steps: 1 # paper has this as 8 but we do our own downsampling in the data conversion script
+  correction_upsampling:
+    enabled: True
+    threshold: 1.0 # importance power
+    lookback_horizon: 5         # how many frames back to check for the "was in correction" average
+    lookback_down_sample_steps: 1
+    weighted_sampling: 4          # duplicate each correction point this many times
+    correction_horizon: 10          # + extra query points
+    only_correction: False
   seed: 42
   val_ratio: 0.0
   max_train_episodes: 90
-  weighted: True
+  weighted: False

@@ -202,6 +202,23 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
                     
                     t1_2 = time.time()
 
+                    submodule_grad_norms = {}
+                    all_grads = []
+                    for name, param in self.model.named_parameters():
+                        if param.grad is not None:
+                            g = param.grad.detach()
+                            all_grads.append(g.flatten())
+                            part = name.split('.')[0]
+                            submodule_grad_norms[part] = (
+                                submodule_grad_norms.get(part, 0.0)
+                                + g.norm().item() ** 2
+                            )
+                    grad_norm = torch.cat(all_grads).norm().item() if all_grads else 0.0
+                    submodule_grad_norms = {
+                        f'grad_norm/{k}': v ** 0.5 for k, v in submodule_grad_norms.items()
+                    }
+
+
                     # step optimizer
                     if self.global_step % cfg.training.gradient_accumulate_every == 0:
                         self.optimizer.step()
@@ -217,17 +234,6 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
                     tepoch.set_postfix(loss=raw_loss_cpu, refresh=False)
                     train_losses.append(raw_loss_cpu)
 
-                    grads = [
-                        param.grad.detach().flatten()
-                        for param in self.model.parameters()
-                        if param.grad is not None
-                    ]
-                    grad_norm = (
-                        torch.cat(grads).norm()
-                        if len(grads) > 0
-                        else 0
-                    )
-
                     step_log = {
                         'train_loss': raw_loss_cpu,
                         'unet_loss': loss_dict["bc_loss"],
@@ -237,7 +243,8 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
                         'global_step': self.global_step,
                         'epoch': self.epoch,
                         'lr': lr_scheduler.get_last_lr()[0],
-                        'grad_norm': grad_norm
+                        'grad_norm': grad_norm,
+                        **submodule_grad_norms,
                     }
                     t1_5 = time.time()
                     step_log.update(loss_dict)

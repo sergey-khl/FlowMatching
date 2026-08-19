@@ -3,21 +3,19 @@
 # bash scripts/train_policy.sh train_flow_matching rtc_match_rgb wam_pandp-solo-cup_dmp_2cam_weighted_jp-ee 0001 0 0
 
 # BEFORE RUNNING:
-# collect data at 500 hz or at least 128. base willl run at 10hz and res at 50
+# collect data at 500 hz or at least 128. base willl run at 1hz and res at 50
 # collect img timestamps. these are used as the base index for the sampler
 # torque is ema at 500 windows with removed offset
 # https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/workspace/train_residual_mlp_workspace.py#L51
 # ^^ to load base policy checkpoint
 # rc jp actoins should be diffs to match
-# add correction_only flag to tell if we are only loading around correction
-# find the closes 
 #
 #
 # NOTES:
 # pose9wrench6 is used. action dim 15
 # https://github.com/yifan-hou/cr-dagger/blob/main/PyriteConfig/tasks/common/common_type_conversions.py#L454
 # they have a virtual target estimator which puts the torques with params to get a stiffness estimate without MLP.
-# not used in their online config
+# not used in their online config. paper says stiffness is static.
 #
 # didnt see a base policy. will assume its just rtc flow matching without corrections
 #
@@ -39,10 +37,10 @@
     # action: trim to the shortest length
 # OBS
     # can include item poses but does not
-    # includes policy with timestamps
+    # includes policy with timestamps but unused in non transformer version
     # includes target and stiffness in the non online version
     # paper says predicts 15 dim so i am guessing they used the online version in which case no target and no gripper
-    # policy input is the base policy abs pose. In the paper this is 32 actions at 10hz so 3.2seconds of actions. In the sparse dataset we use 6 of the last 1.2 seconds as policy obs input
+    # policy input is the base policy abs pose. In the paper this is 32 actions at 10hz so 3.2seconds of actions. In the sparse dataset we use 6 of the last 0.6 seconds as policy obs input
 # training
     # done on corrections only
     # WeightedRandomSampler
@@ -51,10 +49,10 @@
     # have an identity norm over rotmat. should consider if getting bad results 
     # same thing with torque. in their case they do range norm with wrench 424: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/dataset/dynamic_dataset.py
 
-# TODO
+# Double Check
 # see how https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/diffusion_unet_timm_mod1_policy.py#L30
 # is different from the other diffusions. also how the transformer_obs_encoder
-# pretty sure virtual_target does nothign with static stiffness but double sheck
+# pretty sure virtual_target does nothign with static stiffness
 #
 # cr vs dg differences
 # no ft sensor so force encoder input dim is 7.

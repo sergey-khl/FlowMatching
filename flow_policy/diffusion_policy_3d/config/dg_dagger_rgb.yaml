@@ -3,11 +3,12 @@ defaults:
 
 name: train_dg_dagger
 
-output_dir: /mnt/10tb/serg/FlowMatching/outputs/${name}_${task_name}
 
 task_name: ${task.name}
 shape_meta: ${task.shape_meta}
 exp_name: "debug"
+
+output_dir: /mnt/10tb/serg/FlowMatching/outputs/${name}_${task_name}
 
 horizon: 10
 n_obs_steps: 1
