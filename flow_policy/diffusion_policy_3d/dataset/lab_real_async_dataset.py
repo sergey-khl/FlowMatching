@@ -31,7 +31,6 @@ class LabRealAsyncDataset(BaseDataset):
         max_train_episodes=None,
         task_name=None,
         has_pointclouds=False,
-        weighted=False,
         num_points=4096,
     ):
         super().__init__()
@@ -40,7 +39,6 @@ class LabRealAsyncDataset(BaseDataset):
 
         self.has_pointclouds = has_pointclouds
         self.num_points = num_points
-        self.weighted = weighted
 
         sample_cfg = shape_meta["sample"]
         self.obs_key_horizons = sample_cfg["obs"]["sparse"]
@@ -69,7 +67,7 @@ class LabRealAsyncDataset(BaseDataset):
         }
 
         low_dim_keys = {"state", "action", low_dim_time_key}
-        if self.weighted  or self.correction_upsampling["enabled"]:
+        if self.correction_upsampling["enabled"]:
             low_dim_keys.add("traj_weight")
         # TODO: pc should be sep
         if self.has_pointclouds:
@@ -139,7 +137,7 @@ class LabRealAsyncDataset(BaseDataset):
     def get_normalizer(self, mode="limits", **kwargs):
         data = {
             "action": self.low_dim_replay_buffer["action"],
-            "agent_pos": self.low_dim_replay_buffer["agent_pos"][..., :],
+            "state": self.low_dim_replay_buffer["state"][..., :],
         }
         normalizer = LinearNormalizer()
         normalizer.fit(data=data, last_n_dims=1, mode=mode, **kwargs)
@@ -154,8 +152,7 @@ class LabRealAsyncDataset(BaseDataset):
         if self.has_pointclouds:
             normalizer["point_cloud"] = SingleFieldLinearNormalizer.create_identity()
  
-        if self.weighted:
-            normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
+        normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
  
         normalizer["ext_torque"] = SingleFieldLinearNormalizer.create_identity()
  

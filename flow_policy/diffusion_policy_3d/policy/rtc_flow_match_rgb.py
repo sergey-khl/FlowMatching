@@ -122,12 +122,18 @@ class RTCFlowMatchingRGB(BasePolicy):
             action_visible=False,
         )
 
+        sample_meta = shape_meta.get("sample", {})
+        obs_sparse_meta = sample_meta.get("obs", {}).get("sparse", {})
+        self.obs_key_horizons = {
+            key: cfg.get("horizon", n_obs_steps)
+            for key, cfg in obs_sparse_meta.items()
+        }
+
         self.normalizer = LinearNormalizer()
         self.horizon = horizon
         self.obs_feature_dim = obs_feature_dim
         self.action_dim = action_dim
         self.n_action_steps = n_action_steps
-        self.n_obs_steps = n_obs_steps
         self.obs_as_global_cond = obs_as_global_cond
         self.kwargs = kwargs
         self.weighted_loss = weighted_loss
@@ -241,7 +247,6 @@ class RTCFlowMatchingRGB(BasePolicy):
         T = self.horizon
         Da = self.action_dim
         Do = self.obs_feature_dim
-        To = self.n_obs_steps
 
         # build input
         device = self.device
@@ -252,12 +257,9 @@ class RTCFlowMatchingRGB(BasePolicy):
         global_cond = None
         if self.obs_as_global_cond:
             # condition through global feature
-            this_nobs = dict_apply(
-                nobs, lambda x: x[:, :To, ...]
-            )
-            nobs_features = self.obs_encoder(this_nobs)
+            nobs_features = self.obs_encoder(nobs)
             if "cross_attention" in self.condition_type:
-                # treat as a sequence
+                # treat as a sequence. does nothign
                 global_cond = nobs_features.reshape(B, self.n_obs_steps, -1)
             else:
                 # reshape back to B, Do
@@ -265,7 +267,7 @@ class RTCFlowMatchingRGB(BasePolicy):
             # empty data for action
             cond_data = torch.zeros(size=(B, T, Da), device=device, dtype=dtype)
             cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-        else:
+        else: # does nothign
             # condition through impainting
             this_nobs = dict_apply(
                 nobs, lambda x: x[:, :To, ...]
@@ -352,19 +354,15 @@ class RTCFlowMatchingRGB(BasePolicy):
         cond_data = trajectory
 
         if self.obs_as_global_cond:
-            # reshape B, T, ... to B*T
-            this_nobs = dict_apply(
-                nobs, lambda x: x[:, : self.n_obs_steps, ...]
-            )
-            nobs_features = self.obs_encoder(this_nobs)
+            nobs_features = self.obs_encoder(nobs)
 
-            if "cross_attention" in self.condition_type:
+            if "cross_attention" in self.condition_type: # no work
                 # treat as a sequence
                 global_cond = nobs_features.reshape(batch_size, self.n_obs_steps, -1)
             else:
                 # reshape back to B, Do
                 global_cond = nobs_features.reshape(batch_size, -1)
-        else:
+        else: # no work
             # reshape B, T, ... to B*T
             this_nobs = dict_apply(nobs, lambda x: x)
             nobs_features = self.obs_encoder(this_nobs)

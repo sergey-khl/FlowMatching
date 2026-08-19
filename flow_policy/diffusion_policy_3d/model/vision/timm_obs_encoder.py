@@ -54,7 +54,6 @@ class TimmObsEncoder(ModuleAttrMixin):
             model_name: str,
             pretrained: bool,
             frozen: bool,
-            n_obs_steps: 2,
             global_pool: str,
             transforms: list,
             # replace BatchNorm with GroupNorm
@@ -81,7 +80,6 @@ class TimmObsEncoder(ModuleAttrMixin):
         key_transform_map = nn.ModuleDict()
         key_shape_map = dict()
 
-        self.n_obs_steps = n_obs_steps
 
         assert global_pool == ''
         
@@ -306,10 +304,16 @@ class TimmObsEncoder(ModuleAttrMixin):
     def output_shape(self):
         example_obs_dict = dict()
         obs_shape_meta = self.shape_meta['obs']
+        sample_obs_shape_meta = self.shape_meta["sample"]["obs"]["sparse"]
         for key, attr in obs_shape_meta.items():
+            type = attr.get("type", "low_dim")
+            if type == "timestamp" or type == "index":
+                continue
+
             shape = tuple(attr['shape'])
+            horizon = sample_obs_shape_meta[key]["horizon"]
             this_obs = torch.zeros(
-                (1, self.n_obs_steps) + shape, 
+                (1, horizon) + shape, 
                 dtype=self.dtype,
                 device=self.device)
             example_obs_dict[key] = this_obs

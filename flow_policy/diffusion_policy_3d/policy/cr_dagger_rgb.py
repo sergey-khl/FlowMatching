@@ -111,7 +111,6 @@ class CrDaggerRGB(BasePolicy):
         self.obs_feature_dim = obs_feature_dim
         self.action_dim = action_dim
         self.n_action_steps = n_action_steps
-        self.n_obs_steps = n_obs_steps
         self.obs_as_global_cond = obs_as_global_cond
         self.kwargs = kwargs
         self.weighted_loss = weighted_loss
@@ -196,7 +195,6 @@ class CrDaggerRGB(BasePolicy):
         T = self.horizon
         Da = self.action_dim
         Do = self.obs_feature_dim
-        To = self.n_obs_steps
 
         # build input
         device = self.device
@@ -206,12 +204,8 @@ class CrDaggerRGB(BasePolicy):
         local_cond = None
         global_cond = None
         if self.obs_as_global_cond:
-            # condition through global feature
-            this_nobs = dict_apply(
-                nobs, lambda x: x[:, :To, ...]
-            )
-            nobs_features = self.obs_encoder(this_nobs)["result"]
-            if "cross_attention" in self.condition_type:
+            nobs_features = self.obs_encoder(nobs)["result"]
+            if "cross_attention" in self.condition_type: # does nothign
                 # treat as a sequence
                 global_cond = nobs_features.reshape(B, self.n_obs_steps, -1)
             else:
@@ -307,19 +301,15 @@ class CrDaggerRGB(BasePolicy):
         cond_data = trajectory
 
         if self.obs_as_global_cond:
-            # reshape B, T, ... to B*T
-            this_nobs = dict_apply(
-                nobs, lambda x: x[:, : self.n_obs_steps, ...]
-            )
-            nobs_features = self.obs_encoder(this_nobs)["result"]
+            nobs_features = self.obs_encoder(nobs)["result"]
 
-            if "cross_attention" in self.condition_type:
+            if "cross_attention" in self.condition_type: # does nothgin
                 # treat as a sequence
                 global_cond = nobs_features.reshape(batch_size, self.n_obs_steps, -1)
             else:
                 # reshape back to B, Do
                 global_cond = nobs_features.reshape(batch_size, -1)
-        else:
+        else: # does nothign
             # reshape B, T, ... to B*T
             this_nobs = dict_apply(nobs, lambda x: x)
             nobs_features = self.obs_encoder(this_nobs)

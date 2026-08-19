@@ -300,7 +300,7 @@ class UdpRunner(BaseRunner):
                     # [-gripper],
                 ]).astype(np.float32)  # (8,)
 
-                obs["agent_pos"] = state
+                obs["state"] = state
 
                 self.obs_history.append(obs)
 

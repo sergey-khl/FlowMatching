@@ -68,7 +68,6 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
         self,
         shape_meta: dict,
         fuse_mode: str,
-        n_obs_steps: int,
         reduce_pretrained_lr: bool,
         vision_encoder_cfg: dict = None,
         force_encoder_cfg: dict = None,
@@ -264,8 +263,6 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
         self.key_shape_map = key_shape_map
         self.position_encoding = position_encoding
 
-        self.n_obs_steps = n_obs_steps
-
         if vision_encoder_cfg is not None:
             feature_map_shape = [
                 x // vision_encoder_cfg.downsample_ratio for x in image_shape
@@ -340,7 +337,9 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
 
                 # the rgb key can either be rgb or ultrawide. Horizon-wise, rgb, ultrawide, and depth are treated the same.
                 first_rgb_key = rgb_keys[0]
-                n_v_features = len(rgb_keys) * self.n_obs_steps
+                n_v_features = len(rgb_keys) * shape_meta["sample"]["obs"]["sparse"][first_rgb_key][
+                    "horizon"
+                ]
                 n_f_features = len(wrench_keys)
 
                 self.linear_projection = nn.Linear(
@@ -473,14 +472,16 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
     def output_shape(self):
         example_obs_dict = dict()
         obs_shape_meta = self.shape_meta['obs']
+        sample_obs_shape_meta = self.shape_meta["sample"]["obs"]["sparse"]
         for key, attr in obs_shape_meta.items():
             type = attr.get("type", "low_dim")
             if type == "timestamp" or type == "index":
                 continue
 
             shape = tuple(attr['shape'])
+            horizon = sample_obs_shape_meta[key]["horizon"]
             this_obs = torch.zeros(
-                (1, self.n_obs_steps) + shape, 
+                (1, horizon) + shape, 
                 dtype=self.dtype,
                 device=self.device)
             example_obs_dict[key] = this_obs

@@ -3,6 +3,7 @@ defaults:
 
 name: train_rtc_flowmatch
 
+output_dir: /mnt/10tb/serg/FlowMatching/outputs/${name}_${task_name}
 
 task_name: ${task.name}
 shape_meta: ${task.shape_meta}

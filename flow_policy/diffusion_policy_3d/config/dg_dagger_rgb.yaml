@@ -63,7 +63,6 @@ policy:
     shape_meta: ${shape_meta}
     fuse_mode: modality-attention
     reduce_pretrained_lr: True
-    n_obs_steps: ${n_obs_steps}
 
 
     ##### from scratch #####

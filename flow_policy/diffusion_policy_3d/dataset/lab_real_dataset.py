@@ -28,7 +28,6 @@ class LabRealDataset(BaseDataset):
         task_name=None,
         has_images=True,
         has_pointclouds=False,
-        weighted=False,
         num_points=4096,
     ):
         super().__init__()
@@ -38,7 +37,6 @@ class LabRealDataset(BaseDataset):
         self.has_images = has_images
         self.has_pointclouds = has_pointclouds
         self.num_points = num_points
-        self.weighted = weighted
 
         buffer_keys = [
             "state",
@@ -53,10 +51,9 @@ class LabRealDataset(BaseDataset):
         if self.has_images:
             for key in self.img_keys:
                 buffer_keys.append(key)
-        if self.weighted:
-            buffer_keys.append("traj_weight")
         for key in self.torque_keys:
             buffer_keys.append(key)
+        buffer_keys.append("traj_weight")
 
         self.replay_buffer = ReplayBuffer.copy_from_path(zarr_path, keys=buffer_keys)
 
@@ -93,7 +90,7 @@ class LabRealDataset(BaseDataset):
 
     def get_normalizer(self, mode="limits", **kwargs):
         # TOOO: check that this is right
-        data = {"action": self.replay_buffer["action"], "agent_pos": self.replay_buffer["state"][..., :]}
+        data = {"action": self.replay_buffer["action"], "state": self.replay_buffer["state"][..., :]}
         normalizer = LinearNormalizer()
         normalizer.fit(data=data, last_n_dims=1, mode=mode, **kwargs)
 
@@ -104,8 +101,7 @@ class LabRealDataset(BaseDataset):
             for key in self.img_keys:
                 normalizer[key] = SingleFieldLinearNormalizer.create_identity()
             
-        if self.weighted:
-            normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
+        normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
 
         normalizer["ext_torque"] = SingleFieldLinearNormalizer.create_identity()
 
@@ -115,11 +111,11 @@ class LabRealDataset(BaseDataset):
         return len(self.sampler)
 
     def _sample_to_data(self, sample):
-        agent_pos = sample["state"][:,].astype(np.float32)
+        state = sample["state"][:,].astype(np.float32)
         
         data = {
             "obs": {
-                "agent_pos": agent_pos,
+                "state": state,
             },
             "action": sample["action"].astype(np.float32),
         }
@@ -135,9 +131,8 @@ class LabRealDataset(BaseDataset):
                 img = np.transpose(img, (0, 3, 1, 2))  # Reshape to (T, C, H, W)
                 data["obs"][key] = img
             
-        if self.weighted:
-            weights = sample['traj_weight'][:,].astype(np.float32)
-            data["weights"] = weights
+        weights = sample['traj_weight'][:,].astype(np.float32)
+        data["weights"] = weights
     
         for key in self.torque_keys:
             data["obs"][key] = sample[key]

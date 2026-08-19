@@ -133,9 +133,9 @@ def downsample_by_timestamp(timestamps_ns, target_dt_ns):
 if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_dmp-100-{IMPORTANCE_POWER}.zarr"
+    # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
+    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_no_dmp2"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_nodmp-100-{IMPORTANCE_POWER}.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -197,7 +197,8 @@ if __name__ == "__main__":
         cart_rot = low_dim["leader_quat_wxyz"][:]        # (N, 4) w,x,y,z
         gripper_pos = low_dim["gripper_pos"][:]           # (N,)
         policy_torque_scale = low_dim["policy_torque_scale"][:] # (N, 7)
-        policy_cmd = low_dim["policy_jp"][:] # (N, 7)
+        # policy_cmd = low_dim["policy_jp"][:] # (N, 7)
+        policy_cmd = low_dim["policy_torque_scale"][:] # (N, 7)
         ext_torque = low_dim["leader_ext_torque"][:]        # (N, 4) w,x,y,z
 
         idxs = downsample_by_timestamp(timestamps_ns, TARGET_DT_NS)
@@ -258,8 +259,8 @@ if __name__ == "__main__":
                 jp_ds[j],
                 cart_pos_ds[j],
                 rotmats_ds[j],
-                policy_cmd_ds[j],
-                ext_torque_ds[j],
+                # policy_cmd_ds[j],
+                # ext_torque_ds[j],
                 # [gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
@@ -268,7 +269,7 @@ if __name__ == "__main__":
                 # quats_ds[j + 1],
                 # delta_pos,
                 jp_ds[j + 1],
-                ext_torque_ds[j + 1],
+                # ext_torque_ds[j + 1],
                 # [gripper_action],
             ]).astype(np.float32)  # (7,)
  
@@ -309,7 +310,8 @@ if __name__ == "__main__":
         if has_images:
             front_image = data["front_image"]  # (M, H, W, 3)
             wrist_image = data["wrist_image"]
-            image_timestamps_ns = data["img_timestamp_ns"][:]
+            # image_timestamps_ns = data["img_timestamp_ns"][:]
+            image_timestamps_ns = low_dim["timestamp_ns"][:]
      
             img_idxs = downsample_by_timestamp(image_timestamps_ns, IMG_TARGET_DT_NS)
             front_img_ds = front_image[img_idxs]
@@ -428,7 +430,7 @@ if __name__ == "__main__":
             compressor=compressor,
         )
         img_meta.create_dataset(
-            "img_episode_ends",
+            "episode_ends",
             data=img_episode_ends_arrays,
             chunks=img_episode_ends_chunk_size,
             dtype="int64",
