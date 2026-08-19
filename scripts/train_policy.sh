@@ -3,13 +3,14 @@
 # bash scripts/train_policy.sh train_flow_matching rtc_match_rgb wam_pandp-solo-cup_dmp_2cam_weighted_jp-ee 0001 0 0
 
 # BEFORE RUNNING:
-# collect data at 500 hz or at least 100. base willl run at 10hz and res at 50
-# collect img timestamps
+# collect data at 500 hz or at least 128. base willl run at 10hz and res at 50
+# collect img timestamps. these are used as the base index for the sampler
 # torque is ema at 500 windows with removed offset
 # https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/workspace/train_residual_mlp_workspace.py#L51
 # ^^ to load base policy checkpoint
 # rc jp actoins should be diffs to match
 # add correction_only flag to tell if we are only loading around correction
+# find the closes 
 #
 #
 # NOTES:
@@ -22,26 +23,31 @@
 #
 # num_of_new_episodes is 0 in https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/online_learning/configs/config_v1.py#L50
 # can ignore new_episode_prob. it gets used when new episode data is available with load_new_episodes. it means there is a chance the new episode gets considered
+# i think its equivalent to a uniform sample in the offline case
 #
 # they already are doing some diffusion with their residual idea: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/diffusion_transformer_timm_policy.py#L13
 # and exporing how to use the latent space: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/bet_lowdim_policy.py
 # https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/model/bet/latent_generators/mingpt.py
 #
+# I think their low_dim data is recorded at 50hz. otherwise their sparse downsampling makes no sense
+#
 # ACTION:
     # last residual is used as diff with current 
     # find the closest policy command before or at the timestamp of the robot command
+    # do the diff with the robot state that is closest to policy time
     # action: trim to the shortest length
-    # action time is according to low_dim ts
 # OBS
     # can include item poses but does not
     # includes policy with timestamps
     # includes target and stiffness in the non online version
     # paper says predicts 15 dim so i am guessing they used the online version in which case no target and no gripper
+    # policy input is the base policy abs pose. In the paper this is 32 actions at 10hz so 3.2seconds of actions. In the sparse dataset we use 6 of the last 1.2 seconds as policy obs input
 # training
     # done on corrections only
     # WeightedRandomSampler
+    # given the idx of the current episode. begin with the time and idx of the first rgb for that episode. extrapolate the other items based on that time. see: sample_sequence
 # normalization
-    # have an identity over rotmat. should consider if getting bad results 
+    # have an range norm over rotmat. should consider if getting bad results 
     #
 
 # TODO
@@ -51,7 +57,7 @@
 # cr vs dg differences
 # no ft sensor so force encoder input dim is 7.
 # predicting ext_torque from joints
-# using the traj_weight signal for determening correction
+# using the traj_weight signal for determening correction threshold
 
 
 

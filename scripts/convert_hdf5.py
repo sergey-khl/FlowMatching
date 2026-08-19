@@ -14,6 +14,7 @@ from scipy.signal import savgol_filter
 has_images = True
 has_pointclouds = False
 has_weights = True
+has_policy = True
 
 CHUNK_SIZE = 100
 
@@ -24,12 +25,11 @@ GRIPPER_ACTION_THRESHOLD = -0.15
 
 IMPORTANCE_POWER = 1  #  changes the spread of the traj_weight
  
-# TODO: set 50
-TARGET_FPS = 10
+TARGET_FPS = 500
 TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
 
 IMG_TARGET_FPS = 10
-IMG_TARGET_DT_NS = int(1e9 / IMG_TARGET_FPS)
+IMG_TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
 
 def find_nearest_index(timestamps, target_time):
     """Return index of the timestamp closest to target_time."""
@@ -111,15 +111,23 @@ def zero_noop_axes(delta_pos, delta_rot):
 
 
 def preprocess_image(image):
-    img_size = 224
+    img_size = (224, 224)
 
     image = image.astype(np.float32)
     image = torch.from_numpy(image).cuda()
     image = image.permute(2, 0, 1)  # HxWx4 -> 4xHxW
-    image = torchvision.transforms.functional.resize(image, (img_size, img_size))
+    image = torchvision.transforms.functional.resize(image, img_size)
     image = image.permute(1, 2, 0)  # 4xHxW -> HxWx4
     image = image.cpu().numpy()
     return image
+
+def downsample_by_timestamp(timestamps_ns, target_dt_ns):
+    t0, t1 = timestamps_ns[0], timestamps_ns[-1]
+    target_times = np.arange(t0, t1 + 1, target_dt_ns)
+    idxs = np.array(
+        [find_nearest_index(timestamps_ns, t) for t in target_times], dtype=np.int64
+    )
+    return np.unique(idxs)
 
 
 if __name__ == "__main__":
@@ -127,7 +135,7 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_dmp-100-{IMPORTANCE_POWER}_jp-ee.zarr"
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_dmp-100-{IMPORTANCE_POWER}.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -138,17 +146,26 @@ if __name__ == "__main__":
         )
         dirs.extend([(path, f) for f in files])
 
-    # storage
+    # raw robot data
     total_count = 0
-    front_img_arrays = []
-    wrist_img_arrays = []
-    point_cloud_arrays = []
-    depth_arrays = []
     state_arrays = []
     action_arrays = []
     episode_ends_arrays = []
-    traj_weight_arrays = []
+    robot_timestamp_arrays = []
+
+    # imgs
+    img_total_count = 0
+    front_img_arrays = []
+    wrist_img_arrays = []
+    img_episode_ends_arrays = []
+    image_timestamp_arrays = []
+
+    # extras. follow raw robot hz
+    policy_cmd_arrays = []
+    point_cloud_arrays = []
+    depth_arrays = []
     ext_torque_arrays = []
+    traj_weight_arrays = []
 
     if os.path.exists(save_data_path):
         cprint("Data already exists at {}".format(save_data_path), "red")
@@ -180,23 +197,19 @@ if __name__ == "__main__":
         cart_rot = low_dim["leader_quat_wxyz"][:]        # (N, 4) w,x,y,z
         gripper_pos = low_dim["gripper_pos"][:]           # (N,)
         policy_torque_scale = low_dim["policy_torque_scale"][:] # (N, 7)
-        front_image = data["front_image"]                 # (N, H, W, 3)
-        wrist_image = data["wrist_image"]
+        policy_cmd = low_dim["policy_jp"][:] # (N, 7)
         ext_torque = low_dim["leader_ext_torque"][:]        # (N, 4) w,x,y,z
 
-        t0, t1 = timestamps_ns[0], timestamps_ns[-1]
-        target_times = np.arange(t0, t1 + 1, TARGET_DT_NS)
-        idxs = np.array([find_nearest_index(timestamps_ns, t) for t in target_times], dtype=np.int64)
-        idxs = np.unique(idxs)  # sorted, deduped
+        idxs = downsample_by_timestamp(timestamps_ns, TARGET_DT_NS)
 
         jp_ds = jp[idxs]
         cart_pos_ds = cart_pos[idxs]
         cart_rot_ds = cart_rot[idxs]
         gripper_pos_ds = gripper_pos[idxs]
-        front_img_ds = front_image[idxs]
-        wrist_img_ds = wrist_image[idxs]
         policy_torque_scale_ds = policy_torque_scale[idxs]
+        policy_cmd_ds = policy_cmd[idxs]
         ext_torque_ds = ext_torque[idxs]
+        robot_timestamp_ds = timestamps_ns[idxs]
 
         # rotvec_ds = quats_to_rotvec(cart_rot_ds)
         # euler_ds = quats_to_euler(cart_rot_ds)
@@ -228,6 +241,7 @@ if __name__ == "__main__":
         noop_count = 0
         episode_weight_arrays = []
 
+        # raw robot data comes in at 500hz
         for j in range(len(idxs) - 1):
             # delta_pos = cart_pos_ds[j + 1] - cart_pos_ds[j]
             # delta_rot = delta_rotvec(cart_rot_ds[j], cart_rot_ds[j + 1])
@@ -244,8 +258,9 @@ if __name__ == "__main__":
                 jp_ds[j],
                 cart_pos_ds[j],
                 rotmats_ds[j],
-                [gripper_pos_ds[j]],
-                # [-gripper_pos_ds[j]],
+                policy_cmd_ds[j],
+                ext_torque_ds[j],
+                # [gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
@@ -255,22 +270,24 @@ if __name__ == "__main__":
                 jp_ds[j + 1],
                 ext_torque_ds[j + 1],
                 # [gripper_action],
-                [gripper_action],
             ]).astype(np.float32)  # (7,)
  
             if has_weights:
                 weight_scale = len(idxs) / weight_sum
                 episode_weight_arrays.append(np.sum(inverted_torques[j], axis=0) * weight_scale)
 
+            if has_policy:
+                policy_cmd_arrays.append(policy_cmd_ds[j].astype(np.float32))
+
             state_arrays.append(state)
             action_arrays.append(action)
-            front_img_arrays.append(preprocess_image(front_img_ds[j]))
-            wrist_img_arrays.append(preprocess_image(wrist_img_ds[j]))
             ext_torque_arrays.append(ext_torque_ds[j])
+            robot_timestamp_arrays.append(robot_timestamp_ds[j])
  
             prev_gripper_action = gripper_action
             episode_len += 1
  
+        # NOTE: noop does not work with the sepeartion of the images
         if episode_len > 0:
             noop_percentage = (noop_count / (episode_len + noop_count)) * 100
             print(f"[{demo_dir}]  Noops: {noop_count}/{(episode_len + noop_count)} steps ({noop_percentage:.2f}%) removed.")
@@ -287,12 +304,36 @@ if __name__ == "__main__":
 
         episode_ends_arrays.append(total_count + episode_len)
         total_count += episode_len
-        
 
-    # create zarr file
+        # img's come in at 60hz
+        if has_images:
+            front_image = data["front_image"]  # (M, H, W, 3)
+            wrist_image = data["wrist_image"]
+            image_timestamps_ns = data["img_timestamp_ns"][:]
+     
+            img_idxs = downsample_by_timestamp(image_timestamps_ns, IMG_TARGET_DT_NS)
+            front_img_ds = front_image[img_idxs]
+            wrist_img_ds = wrist_image[img_idxs]
+            image_timestamp_ds = image_timestamps_ns[img_idxs]
+     
+            for j in range(len(img_idxs)):
+                front_img_arrays.append(preprocess_image(front_img_ds[j]))
+                wrist_img_arrays.append(preprocess_image(wrist_img_ds[j]))
+                image_timestamp_arrays.append(image_timestamp_ds[j])
+     
+            img_episode_len = len(img_idxs)
+            img_episode_ends_arrays.append(img_total_count + img_episode_len)
+            img_total_count += img_episode_len
+ 
+
+    # low_dim and img groups
     zarr_root = zarr.group(save_data_path)
-    zarr_data = zarr_root.create_group("data")
-    zarr_meta = zarr_root.create_group("meta")
+    low_dim_root = zarr_root.create_group("low_dim")
+    low_dim_data = low_dim_root.create_group("data")
+    low_dim_meta = low_dim_root.create_group("meta")
+    img_root = zarr_root.create_group("img")
+    img_data = img_root.create_group("data")
+    img_meta = img_root.create_group("meta")
 
     if has_images:
         front_img_arrays = np.stack(front_img_arrays, axis=0)
@@ -301,12 +342,16 @@ if __name__ == "__main__":
             front_img_arrays = np.transpose(front_img_arrays, (0, 2, 3, 1))
         if wrist_img_arrays.shape[1] == 3:  # make channel last
             wrist_img_arrays = np.transpose(wrist_img_arrays, (0, 2, 3, 1))
+        img_episode_ends_arrays = np.array(img_episode_ends_arrays)
             
     if has_pointclouds:
         point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
     
     if has_weights:
         traj_weight_arrays = np.stack(traj_weight_arrays, axis=0)
+
+    if has_policy:
+        policy_cmd_arrays = np.stack(policy_cmd_arrays, axis=0)
 
     action_arrays = np.stack(action_arrays, axis=0)
     state_arrays = np.stack(state_arrays, axis=0)
@@ -327,6 +372,9 @@ if __name__ == "__main__":
             wrist_img_arrays.shape[2],
             wrist_img_arrays.shape[3],
         )
+        img_episode_ends_chunk_size = (
+            CHUNK_SIZE,
+        )
         
     if has_pointclouds:
         point_cloud_chunk_size = (
@@ -339,6 +387,9 @@ if __name__ == "__main__":
         traj_weights_chunk_size = (
             CHUNK_SIZE,
         )
+
+    if has_policy:
+        policy_chunk_size = (CHUNK_SIZE, 7) # assuming base policy gives jp only
     
     # depth_chunk_size = (CHUNK_SIZE, depth_arrays.shape[1], depth_arrays.shape[2])
     if len(action_arrays.shape) == 2:
@@ -352,7 +403,7 @@ if __name__ == "__main__":
     ext_torque_chunk_size = (CHUNK_SIZE, 7)
     
     if has_images:
-        zarr_data.create_dataset(
+        img_data.create_dataset(
             "front_img",
             data=front_img_arrays,
             chunks=front_img_chunk_size,
@@ -360,7 +411,7 @@ if __name__ == "__main__":
             overwrite=True,
             compressor=compressor,
         )
-        zarr_data.create_dataset(
+        img_data.create_dataset(
             "wrist_img",
             data=wrist_img_arrays,
             chunks=wrist_img_chunk_size,
@@ -368,9 +419,17 @@ if __name__ == "__main__":
             overwrite=True,
             compressor=compressor,
         )
+        img_meta.create_dataset(
+            "img_episode_ends",
+            data=img_episode_ends_arrays,
+            chunks=img_episode_ends_chunk_size,
+            dtype="int64",
+            overwrite=True,
+            compressor=compressor,
+        )
     
     if has_pointclouds:
-        zarr_data.create_dataset(
+        low_dim_data.create_dataset(
             "point_cloud",
             data=point_cloud_arrays,
             chunks=point_cloud_chunk_size,
@@ -380,7 +439,7 @@ if __name__ == "__main__":
         )
         
     if has_weights:
-        zarr_data.create_dataset('traj_weight',
+        low_dim_data.create_dataset('traj_weight',
              data=traj_weight_arrays,
              dtype='float32',
              chunks=traj_weights_chunk_size,
@@ -388,7 +447,16 @@ if __name__ == "__main__":
              compressor=compressor
         )
 
-    zarr_data.create_dataset(
+    if has_policy:
+        low_dim_data.create_dataset('policy_cmd',
+             data=policy_cmd_arrays,
+             dtype='float32',
+             chunks=policy_chunk_size,
+             overwrite=True,
+             compressor=compressor
+        )
+
+    low_dim_data.create_dataset(
         "action",
         data=action_arrays,
         chunks=action_chunk_size,
@@ -396,7 +464,7 @@ if __name__ == "__main__":
         overwrite=True,
         compressor=compressor,
     )
-    zarr_data.create_dataset(
+    low_dim_data.create_dataset(
         "state",
         data=state_arrays,
         chunks=(CHUNK_SIZE, state_arrays.shape[1]),
@@ -404,7 +472,7 @@ if __name__ == "__main__":
         overwrite=True,
         compressor=compressor,
     )
-    zarr_meta.create_dataset(
+    low_dim_meta.create_dataset(
         "episode_ends",
         data=episode_ends_arrays,
         chunks=(CHUNK_SIZE,),
@@ -412,7 +480,7 @@ if __name__ == "__main__":
         overwrite=True,
         compressor=compressor,
     )
-    zarr_data.create_dataset(
+    low_dim_data.create_dataset(
         "ext_torque",
         data=ext_torque_arrays,
         chunks=ext_torque_chunk_size,
@@ -430,6 +498,10 @@ if __name__ == "__main__":
         )
         cprint(
             f"wrist img shape: {wrist_img_arrays.shape}, range: [{np.min(wrist_img_arrays)}, {np.max(wrist_img_arrays)}]",
+            "green",
+        )
+        cprint(
+            f"img_episode_ends shape: {img_episode_ends_arrays.shape}, range: [{np.min(img_episode_ends_arrays)}, {np.max(img_episode_ends_arrays)}]",
             "green",
         )
         
