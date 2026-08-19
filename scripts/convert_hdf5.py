@@ -343,6 +343,7 @@ if __name__ == "__main__":
         if wrist_img_arrays.shape[1] == 3:  # make channel last
             wrist_img_arrays = np.transpose(wrist_img_arrays, (0, 2, 3, 1))
         img_episode_ends_arrays = np.array(img_episode_ends_arrays)
+        image_timestamp_arrays = np.array(image_timestamp_arrays, dtype=np.int64)
             
     if has_pointclouds:
         point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
@@ -357,6 +358,8 @@ if __name__ == "__main__":
     state_arrays = np.stack(state_arrays, axis=0)
     episode_ends_arrays = np.array(episode_ends_arrays)
     ext_torque_arrays = np.stack(ext_torque_arrays, axis=0)
+    robot_timestamp_arrays = np.array(robot_timestamp_arrays, dtype=np.int64)
+
 
     compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
     if has_images:
@@ -401,6 +404,11 @@ if __name__ == "__main__":
 
     # NOTE: assuming 7dof robot
     ext_torque_chunk_size = (CHUNK_SIZE, 7)
+    low_dim_data.create_dataset(
+        "robot_timestamp_ns", data=robot_timestamp_arrays,
+        chunks=(CHUNK_SIZE,),
+        dtype="int64", overwrite=True, compressor=compressor,
+    )
     
     if has_images:
         img_data.create_dataset(
@@ -426,6 +434,11 @@ if __name__ == "__main__":
             dtype="int64",
             overwrite=True,
             compressor=compressor,
+        )
+        img_data.create_dataset(
+            "img_timestamp_ns", data=image_timestamp_arrays,
+            chunks=(CHUNK_SIZE,),
+            dtype="int64", overwrite=True, compressor=compressor,
         )
     
     if has_pointclouds:
@@ -504,6 +517,10 @@ if __name__ == "__main__":
             f"img_episode_ends shape: {img_episode_ends_arrays.shape}, range: [{np.min(img_episode_ends_arrays)}, {np.max(img_episode_ends_arrays)}]",
             "green",
         )
+        cprint(
+            f"image_timestamp_ns shape: {image_timestamp_arrays.shape}, range: [{np.min(image_timestamp_arrays)}, {np.max(image_timestamp_arrays)}]",
+            "green",
+        )
         
     if has_pointclouds:
         cprint(
@@ -531,6 +548,10 @@ if __name__ == "__main__":
     )
     cprint(
         f"ext_torque shape: {ext_torque_arrays.shape}, range: [{np.min(ext_torque_arrays)}, {np.max(ext_torque_arrays)}]",
+        "green",
+    )
+    cprint(
+        f"robot_timestamp_ns shape: {robot_timestamp_arrays.shape}, range: [{np.min(robot_timestamp_arrays)}, {np.max(robot_timestamp_arrays)}]",
         "green",
     )
     cprint(f"total_count: {total_count}", "green")

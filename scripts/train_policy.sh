@@ -29,7 +29,8 @@
 # and exporing how to use the latent space: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/bet_lowdim_policy.py
 # https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/model/bet/latent_generators/mingpt.py
 #
-# I think their low_dim data is recorded at 50hz. otherwise their sparse downsampling makes no sense
+# the human is not interacting with the force torque sensor!! this makes our version way harder. yay!!
+# but also that means they say a correction happens basically whenever there is a lot of ext torque or do they always use the button? not in correction_single_arm
 #
 # ACTION:
     # last residual is used as diff with current 
@@ -47,12 +48,13 @@
     # WeightedRandomSampler
     # given the idx of the current episode. begin with the time and idx of the first rgb for that episode. extrapolate the other items based on that time. see: sample_sequence
 # normalization
-    # have an range norm over rotmat. should consider if getting bad results 
-    #
+    # have an identity norm over rotmat. should consider if getting bad results 
+    # same thing with torque. in their case they do range norm with wrench 424: https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/dataset/dynamic_dataset.py
 
 # TODO
 # see how https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/policy/diffusion_unet_timm_mod1_policy.py#L30
 # is different from the other diffusions. also how the transformer_obs_encoder
+# pretty sure virtual_target does nothign with static stiffness but double sheck
 #
 # cr vs dg differences
 # no ft sensor so force encoder input dim is 7.

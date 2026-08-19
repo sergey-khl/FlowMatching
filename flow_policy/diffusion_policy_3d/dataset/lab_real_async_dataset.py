@@ -20,12 +20,10 @@ class LabRealAsyncDataset(BaseDataset):
     def __init__(
         self,
         zarr_path,
-        obs_key_horizons: dict,
-        extra_streams: dict = None,
-        action_horizon: int = 8,
-        action_down_sample_steps: int = 1,
+        shape_meta: dict,
         action_padding: bool = False,
         low_dim_time_key: str = "robot_timestamp_ns",
+        img_time_key: str = "img_timestamp_ns",
         query_frequency_down_sample_steps: int = 1,
         correction_upsampling: dict = None,
         seed=42,
@@ -43,12 +41,21 @@ class LabRealAsyncDataset(BaseDataset):
         self.has_pointclouds = has_pointclouds
         self.num_points = num_points
         self.weighted = weighted
-        self.obs_key_horizons = obs_key_horizons
-        self.action_horizon = action_horizon
-        self.action_down_sample_steps = action_down_sample_steps
+
+        sample_cfg = shape_meta["sample"]
+        self.obs_key_horizons = sample_cfg["obs"]["sparse"]
+        action_cfg = sample_cfg["action"]["sparse"]
+        self.action_horizon = action_cfg["horizon"]
+        self.action_down_sample_steps = action_cfg.get(
+            "down_sample_steps", 1
+        )
+        self.buffer_time_ms = sample_cfg.get(
+            "training_duration_per_sparse_query", 200
+        )
+
         self.action_padding = action_padding
         self.low_dim_time_key = low_dim_time_key
-        self.extra_streams = extra_streams or {}
+        self.img_time_key = img_time_key
         self.query_frequency_down_sample_steps = query_frequency_down_sample_steps
         self.correction_upsampling = {
             "enabled": False,
@@ -62,42 +69,31 @@ class LabRealAsyncDataset(BaseDataset):
         }
 
         low_dim_keys = {"state", "action", low_dim_time_key}
-        if self.weighted:
+        if self.weighted  or self.correction_upsampling["enabled"]:
             low_dim_keys.add("traj_weight")
         # TODO: pc should be sep
         if self.has_pointclouds:
             low_dim_keys.add("point_cloud")
+
+        img_keys = {img_time_key}
         for key, cfg in self.obs_key_horizons.items():
-            if cfg.get("source", "low_dim") == "low_dim":
+            source = cfg.get("source", "low_dim")
+            if source == "low_dim":
                 low_dim_keys.add(key)
+            elif source == "img":
+                img_keys.add(key)
+            else:
+                raise ValueError(
+                    f"obs_key_horizons['{key}'].source == '{source}' but only "
+                    f"'low_dim' and 'img' are supported"
+                )
+
         self.low_dim_replay_buffer = ReplayBuffer.copy_from_path(
             os.path.join(zarr_path, "low_dim"), keys=list(low_dim_keys)
         )
-
-        used_sources = {
-            cfg.get("source", "low_dim") for cfg in obs_key_horizons.values()
-        }
-
-        self.source_replay_buffers = {}
-        for source_name in used_sources:
-            if source_name == "low_dim":
-                continue
-            stream_cfg = self.extra_streams[source_name]
-            time_key = stream_cfg["time_key"]
-            source_keys = {
-                key
-                for key, cfg in obs_key_horizons.items()
-                if cfg.get("source") == source_name
-            }
-            source_keys.add(time_key)
- 
-            source_path = os.path.join(zarr_path, source_name)
-            assert os.path.exists(source_path), (
-                f"obs_key_horizons references source='{source_name}' but it gone :("
-            )
-            self.source_replay_buffers[source_name] = ReplayBuffer.copy_from_path(
-                source_path, keys=list(source_keys)
-            )
+        self.img_replay_buffer = ReplayBuffer.copy_from_path(
+            os.path.join(zarr_path, "img"), keys=list(img_keys)
+        )
 
         val_mask = get_val_mask(
             n_episodes=self.low_dim_replay_buffer.n_episodes,
@@ -112,24 +108,19 @@ class LabRealAsyncDataset(BaseDataset):
  
         self.sampler = self._make_sampler(train_mask)
 
-     def _make_sampler(self, episode_mask):
-        extra_sources = {
-            name: {
-                "replay_buffer": rb,
-                "time_key": self.extra_streams[name]["time_key"],
-            }
-            for name, rb in self.source_replay_buffers.items()
-        }
+    def _make_sampler(self, episode_mask):
         return SequenceSamplerAsync(
             low_dim_replay_buffer=self.low_dim_replay_buffer,
+            img_replay_buffer=self.img_replay_buffer,
             obs_key_horizons=self.obs_key_horizons,
             action_horizon=self.action_horizon,
             action_down_sample_steps=self.action_down_sample_steps,
             action_padding=self.action_padding,
             low_dim_time_key=self.low_dim_time_key,
-            extra_sources=extra_sources,
+            img_time_key=self.img_time_key,
             episode_mask=episode_mask,
             query_frequency_down_sample_steps=self.query_frequency_down_sample_steps,
+            buffer_time_ms=self.buffer_time_ms,
             correction_upsampling=self.correction_upsampling["enabled"],
             correction_weight_threshold=self.correction_upsampling["threshold"],
             correction_lookback_horizon=self.correction_upsampling["lookback_horizon"],
@@ -138,6 +129,7 @@ class LabRealAsyncDataset(BaseDataset):
             correction_horizon=self.correction_upsampling["correction_horizon"],
             only_correction=self.correction_upsampling["only_correction"],
         )
+
     def get_validation_dataset(self):
         val_set = copy.copy(self)
         val_set.sampler = self._make_sampler(~self.train_mask)
@@ -145,22 +137,28 @@ class LabRealAsyncDataset(BaseDataset):
         return val_set
 
     def get_normalizer(self, mode="limits", **kwargs):
-        data = {"action": self.replay_buffer["action"], "agent_pos": self.replay_buffer["state"][..., :]}
+        data = {
+            "action": self.low_dim_replay_buffer["action"],
+            "agent_pos": self.low_dim_replay_buffer["agent_pos"][..., :],
+        }
         normalizer = LinearNormalizer()
         normalizer.fit(data=data, last_n_dims=1, mode=mode, **kwargs)
-
+ 
+        img_out_keys = [
+            key for key, cfg in self.obs_key_horizons.items()
+            if cfg.get("source") == "img"
+        ]
+        for key in img_out_keys:
+            normalizer[key] = SingleFieldLinearNormalizer.create_identity()
+ 
         if self.has_pointclouds:
             normalizer["point_cloud"] = SingleFieldLinearNormalizer.create_identity()
-            
-        if self.has_images:
-            for key in self.img_keys:
-                normalizer[key] = SingleFieldLinearNormalizer.create_identity()
-            
+ 
         if self.weighted:
             normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
-
+ 
         normalizer["ext_torque"] = SingleFieldLinearNormalizer.create_identity()
-
+ 
         return normalizer
 
     def __len__(self) -> int:
@@ -171,7 +169,7 @@ class LabRealAsyncDataset(BaseDataset):
  
         for key, cfg in self.obs_key_horizons.items():
             arr = obs_sample[key].astype(np.float32)
-            out_key = "agent_pos" if key == "state" else key
+            out_key = key
             if cfg.get("source") == "img":
                 arr = np.transpose(arr, (0, 3, 1, 2))  # (T,H,W,C) -> (T,C,H,W)
             if cfg.get("source") == "point_cloud":
