@@ -14,7 +14,7 @@ shape_meta: &shape_meta
         shape: *image_shape
         type: rgb
     state:
-      shape: [17] # [...7dofjp, ...ee pos, ...2x3 rows of rotation matrix, gripper pos]
+      shape: [16] # [...7dofjp, ...ee pos, ...2x3 rows of rotation matrix, gripper pos]
       type: low_dim
     ext_torque:
       shape: [7]

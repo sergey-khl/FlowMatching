@@ -319,7 +319,7 @@ if __name__ == "__main__":
                 # quats_ds[j + 1],
                 # delta_pos,
                 jp_ds[j + 1],
-                # ext_torque_ds[j + 1],
+                human_torque_ds[j + 1],
                 # [gripper_action],
             ]).astype(np.float32)  # (7,)
  
@@ -346,7 +346,7 @@ if __name__ == "__main__":
 
             append_ds(low_dim_data, "state", ep_state, (CHUNK_SIZE, ep_state.shape[1]), "float32")
             append_ds(low_dim_data, "action", ep_action, (CHUNK_SIZE, ep_action.shape[1]), "float32")
-            append_ds(low_dim_data, "human_torque", ep_human_torque, (CHUNK_SIZE, 7), "float32")
+            append_ds(low_dim_data, "ext_torque", ep_human_torque, (CHUNK_SIZE, 7), "float32")
             append_ds(low_dim_data, "robot_timestamp_ns", ep_robot_ts, (CHUNK_SIZE,), "int64")
 
             if has_policy:
