@@ -251,10 +251,7 @@ class RTCForceFlowMatchingRGB(BasePolicy):
         global_cond = None
         if self.obs_as_global_cond:
             # condition through global feature
-            this_nobs = dict_apply(
-                nobs, lambda x: x[:, :To, ...]
-            )
-            nobs_features = self.obs_encoder(this_nobs)["result"]
+            nobs_features = self.obs_encoder(nobs)["result"]
             if "cross_attention" in self.condition_type:
                 # treat as a sequence
                 global_cond = nobs_features.reshape(B, self.n_obs_steps, -1)
@@ -352,10 +349,7 @@ class RTCForceFlowMatchingRGB(BasePolicy):
 
         if self.obs_as_global_cond:
             # reshape B, T, ... to B*T
-            this_nobs = dict_apply(
-                nobs, lambda x: x[:, : self.n_obs_steps, ...]
-            )
-            nobs_features = self.obs_encoder(this_nobs)["result"]
+            nobs_features = self.obs_encoder(nobs)["result"]
 
             if "cross_attention" in self.condition_type:
                 # treat as a sequence
