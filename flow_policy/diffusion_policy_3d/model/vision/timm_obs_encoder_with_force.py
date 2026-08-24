@@ -191,7 +191,7 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
         for key, attr in obs_shape_meta.items():
             shape = tuple(attr["shape"])
             type = attr.get("type", "low_dim")
-            if type == "rgb":
+            if type == "rgb" or type== "img":
                 assert image_shape is None or image_shape == shape[1:]
                 image_shape = shape[1:]
         if vision_encoder_cfg is not None:
@@ -214,7 +214,7 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
             shape = tuple(attr["shape"])
             type = attr.get("type", "low_dim")
             key_shape_map[key] = shape
-            if type == "rgb":
+            if type == "rgb" or type== "img":
                 rgb_keys.append(key)
 
                 vision_encoder = (

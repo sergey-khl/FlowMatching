@@ -47,7 +47,7 @@ class ForceEncoder(nn.Module):
             nn.LeakyReLU(0.1, inplace=True),
             CausalConv1D(64, 128, kernel_size=2, stride=2),
             nn.LeakyReLU(0.1, inplace=True),
-            CausalConv1D(128, 2 * self.z_dim, kernel_size=2, stride=2),
+            CausalConv1D(128, self.z_dim, kernel_size=2, stride=2), # they do 2 self.z_dim here for pos and force together
             nn.LeakyReLU(0.1, inplace=True),
         )
 

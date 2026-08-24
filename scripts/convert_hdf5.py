@@ -25,7 +25,7 @@ GRIPPER_ACTION_THRESHOLD = -0.15
 
 IMPORTANCE_POWER = 1  #  changes the spread of the traj_weight
  
-TARGET_FPS = 500
+TARGET_FPS = 250
 TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
 
 IMG_TARGET_FPS = 10
@@ -34,6 +34,28 @@ IMG_TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
 def find_nearest_index(timestamps, target_time):
     """Return index of the timestamp closest to target_time."""
     return int(np.argmin(np.abs(timestamps - target_time)))
+
+def match_nearest_indices(query_timestamps, ref_timestamps):
+    """
+    For each timestamp in query_timestamps, find the index into ref_timestamps whose value is closest.
+    """
+    idxs = np.searchsorted(ref_timestamps, query_timestamps)
+    idxs = np.clip(idxs, 1, len(ref_timestamps) - 1)
+
+    left = ref_timestamps[idxs - 1]
+    right = ref_timestamps[idxs]
+
+    # step back to idxs-1 if that's actually closer
+    idxs -= (np.abs(query_timestamps - left) < np.abs(query_timestamps - right))
+    return idxs
+
+def fetch_by_indices(dataset, idxs):
+    """
+    indexing with duplicates
+    """
+    unique_idxs, inverse = np.unique(idxs, return_inverse=True)
+    fetched = dataset[unique_idxs]        # h5py read: unique & increasing, OK
+    return fetched[inverse]               # numpy read: dups/any order, OK
 
 def quats_to_rotvec(quats):
     """compute state angle as a rotvec based on the home quat"""
@@ -129,13 +151,21 @@ def downsample_by_timestamp(timestamps_ns, target_dt_ns):
     )
     return np.unique(idxs)
 
+def append_ds(group, name, data, chunk_shape, dtype):
+    """Create a resizable dataset on first call, append on every call after."""
+    if name not in group:
+        group.create_dataset(
+            name, shape=(0,) + data.shape[1:], chunks=chunk_shape,
+            dtype=dtype, compressor=compressor,
+        )
+    group[name].append(data, axis=0)
 
 if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_no_dmp2"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_nodmp-100-{IMPORTANCE_POWER}.zarr"
+    expert_data_paths = ["/mnt/10tb/serg/datasets/plug_asus_153"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_plug-asus-153_nocorr-{IMPORTANCE_POWER}.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -164,7 +194,7 @@ if __name__ == "__main__":
     policy_cmd_arrays = []
     point_cloud_arrays = []
     depth_arrays = []
-    ext_torque_arrays = []
+    human_torque_arrays = []
     traj_weight_arrays = []
 
     if os.path.exists(save_data_path):
@@ -179,6 +209,15 @@ if __name__ == "__main__":
             cprint("Exiting", "red")
             exit()
     os.makedirs(save_data_path, exist_ok=True)
+
+    compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
+    zarr_root = zarr.group(save_data_path)
+    low_dim_root = zarr_root.create_group("low_dim")
+    low_dim_data = low_dim_root.create_group("data")
+    low_dim_meta = low_dim_root.create_group("meta")
+    img_root = zarr_root.create_group("img")
+    img_data = img_root.create_group("data")
+    img_meta = img_root.create_group("meta")
     
     # check the first episode to see if we have images and point clouds
     data = h5py.File(os.path.join(dirs[0][0], dirs[0][1]), "r")
@@ -186,10 +225,17 @@ if __name__ == "__main__":
     for i, (base_path, demo_dir) in enumerate(dirs):
         dir_name = os.path.dirname(demo_dir)
 
-        cprint("Processing {}".format(demo_dir), "green")
         
         data = h5py.File(os.path.join(base_path, demo_dir), "r")
         low_dim = data["low_dim"]
+        images = data["images"]
+
+        if has_images and ("front_image" not in images or "wrist_image" not in images):
+            cprint(f"[{demo_dir}] Missing front_image/wrist_image, skipping episode", "yellow")
+            data.close()
+            continue
+
+        cprint("Processing {}".format(demo_dir), "green")
 
         timestamps_ns = low_dim["timestamp_ns"][:]
         jp = low_dim["leader_jp"][:]       # (N, 7)
@@ -197,9 +243,13 @@ if __name__ == "__main__":
         cart_rot = low_dim["leader_quat_wxyz"][:]        # (N, 4) w,x,y,z
         gripper_pos = low_dim["gripper_pos"][:]           # (N,)
         policy_torque_scale = low_dim["policy_torque_scale"][:] # (N, 7)
-        # policy_cmd = low_dim["policy_jp"][:] # (N, 7)
-        policy_cmd = low_dim["policy_torque_scale"][:] # (N, 7)
-        ext_torque = low_dim["leader_ext_torque"][:]        # (N, 4) w,x,y,z
+        policy_cmd = low_dim["policy_jp"][:] # (N, 7)
+        human_torque = low_dim["human_torque"][:]        # (N, 4) w,x,y,z
+
+        # robot and images captured with different unix time thing
+        front_timestamps_ns_raw = images["front_image"]["front_img_timestamp_ns"][:]
+        clock_offset_ns = int(front_timestamps_ns_raw[0]) - int(timestamps_ns[0])
+        timestamps_ns = timestamps_ns + clock_offset_ns
 
         idxs = downsample_by_timestamp(timestamps_ns, TARGET_DT_NS)
 
@@ -209,7 +259,7 @@ if __name__ == "__main__":
         gripper_pos_ds = gripper_pos[idxs]
         policy_torque_scale_ds = policy_torque_scale[idxs]
         policy_cmd_ds = policy_cmd[idxs]
-        ext_torque_ds = ext_torque[idxs]
+        human_torque_ds = human_torque[idxs]
         robot_timestamp_ds = timestamps_ns[idxs]
 
         # rotvec_ds = quats_to_rotvec(cart_rot_ds)
@@ -282,11 +332,39 @@ if __name__ == "__main__":
 
             state_arrays.append(state)
             action_arrays.append(action)
-            ext_torque_arrays.append(ext_torque_ds[j])
+            human_torque_arrays.append(human_torque_ds[j])
             robot_timestamp_arrays.append(robot_timestamp_ds[j])
  
             prev_gripper_action = gripper_action
             episode_len += 1
+
+        if episode_len > 0:
+            ep_state = np.stack(state_arrays, axis=0)
+            ep_action = np.stack(action_arrays, axis=0)
+            ep_human_torque = np.stack(human_torque_arrays, axis=0)
+            ep_robot_ts = np.array(robot_timestamp_arrays, dtype=np.int64)
+
+            append_ds(low_dim_data, "state", ep_state, (CHUNK_SIZE, ep_state.shape[1]), "float32")
+            append_ds(low_dim_data, "action", ep_action, (CHUNK_SIZE, ep_action.shape[1]), "float32")
+            append_ds(low_dim_data, "human_torque", ep_human_torque, (CHUNK_SIZE, 7), "float32")
+            append_ds(low_dim_data, "robot_timestamp_ns", ep_robot_ts, (CHUNK_SIZE,), "int64")
+
+            if has_policy:
+                ep_policy = np.stack(policy_cmd_arrays, axis=0)
+                append_ds(low_dim_data, "policy_cmd", ep_policy, (CHUNK_SIZE, 7), "float32")
+
+            if has_weights:
+                episode_weights = np.array(episode_weight_arrays, dtype=np.float64)
+                total = episode_weights.sum()
+                spread = episode_weights ** IMPORTANCE_POWER
+                episode_weights = spread * (total / spread.sum())
+                ep_weights = episode_weights.astype(np.float32)
+                append_ds(low_dim_data, "traj_weight", ep_weights, (CHUNK_SIZE,), "float32")
+
+            # reset per-episode lists so they don't accumulate across episodes
+            state_arrays, action_arrays = [], []
+            human_torque_arrays, robot_timestamp_arrays = [], []
+            policy_cmd_arrays = []
  
         # NOTE: noop does not work with the sepeartion of the images
         if episode_len > 0:
@@ -295,198 +373,56 @@ if __name__ == "__main__":
         else:
             print(f"[{demo_dir}]  Episode too short to form a single step.")
  
-        if has_weights:
-            episode_weights = np.array(episode_weight_arrays, dtype=np.float64)
-            total = episode_weights.sum()
-            spread = episode_weights ** IMPORTANCE_POWER
-            spread_sum = spread.sum()
-            episode_weights = spread * (total / spread_sum)
-            traj_weight_arrays.extend(episode_weights)
 
         episode_ends_arrays.append(total_count + episode_len)
         total_count += episode_len
 
-        # img's come in at 60hz
         if has_images:
-            front_image = data["front_image"]  # (M, H, W, 3)
-            wrist_image = data["wrist_image"]
-            # image_timestamps_ns = data["img_timestamp_ns"][:]
-            image_timestamps_ns = low_dim["timestamp_ns"][:]
-     
-            img_idxs = downsample_by_timestamp(image_timestamps_ns, IMG_TARGET_DT_NS)
+            front_image = images["front_image"]["images"]  # (M, H, W, 3)
+            wrist_image = images["wrist_image"]["images"]   # (K, H, W, 3)
+
+            front_timestamps_ns = images["front_image"]["front_img_timestamp_ns"][:]
+            wrist_timestamps_ns = images["wrist_image"]["wrist_img_timestamp_ns"][:]
+
+            # downsample using front camera as the anchor
+            img_idxs = downsample_by_timestamp(front_timestamps_ns, IMG_TARGET_DT_NS)
             front_img_ds = front_image[img_idxs]
-            wrist_img_ds = wrist_image[img_idxs]
-            image_timestamp_ds = image_timestamps_ns[img_idxs]
-     
-            for j in range(len(img_idxs)):
-                front_img_arrays.append(preprocess_image(front_img_ds[j]))
-                wrist_img_arrays.append(preprocess_image(wrist_img_ds[j]))
-                image_timestamp_arrays.append(image_timestamp_ds[j])
-     
+            image_timestamp_ds = front_timestamps_ns[img_idxs]
+
+            # find the wrist frame closest in time to each chosen front frame
+            wrist_idxs = match_nearest_indices(image_timestamp_ds, wrist_timestamps_ns)
+            wrist_img_ds = fetch_by_indices(wrist_image, wrist_idxs)
+            
+            ep_front = np.stack([preprocess_image(front_img_ds[j]) for j in range(len(img_idxs))], axis=0)
+            ep_wrist = np.stack([preprocess_image(wrist_img_ds[j]) for j in range(len(img_idxs))], axis=0)
+            ep_img_ts = np.array(image_timestamp_ds, dtype=np.int64)
+
+            if ep_front.shape[1] == 3:
+                ep_front = np.transpose(ep_front, (0, 2, 3, 1))
+            if ep_wrist.shape[1] == 3:
+                ep_wrist = np.transpose(ep_wrist, (0, 2, 3, 1))
+
+            front_chunk = (CHUNK_SIZE, ep_front.shape[1], ep_front.shape[2], ep_front.shape[3])
+            wrist_chunk = (CHUNK_SIZE, ep_wrist.shape[1], ep_wrist.shape[2], ep_wrist.shape[3])
+
+            append_ds(img_data, "front_img", ep_front, front_chunk, "uint8")
+            append_ds(img_data, "wrist_img", ep_wrist, wrist_chunk, "uint8")
+            append_ds(img_data, "img_timestamp_ns", ep_img_ts, (CHUNK_SIZE,), "int64")
+
             img_episode_len = len(img_idxs)
             img_episode_ends_arrays.append(img_total_count + img_episode_len)
             img_total_count += img_episode_len
- 
-
-    # low_dim and img groups
-    zarr_root = zarr.group(save_data_path)
-    low_dim_root = zarr_root.create_group("low_dim")
-    low_dim_data = low_dim_root.create_group("data")
-    low_dim_meta = low_dim_root.create_group("meta")
-    img_root = zarr_root.create_group("img")
-    img_data = img_root.create_group("data")
-    img_meta = img_root.create_group("meta")
 
     if has_images:
-        front_img_arrays = np.stack(front_img_arrays, axis=0)
-        wrist_img_arrays = np.stack(wrist_img_arrays, axis=0)
-        if front_img_arrays.shape[1] == 3:  # make channel last
-            front_img_arrays = np.transpose(front_img_arrays, (0, 2, 3, 1))
-        if wrist_img_arrays.shape[1] == 3:  # make channel last
-            wrist_img_arrays = np.transpose(wrist_img_arrays, (0, 2, 3, 1))
-        img_episode_ends_arrays = np.array(img_episode_ends_arrays)
-        image_timestamp_arrays = np.array(image_timestamp_arrays, dtype=np.int64)
-            
-    if has_pointclouds:
-        point_cloud_arrays = np.stack(point_cloud_arrays, axis=0)
-    
-    if has_weights:
-        traj_weight_arrays = np.stack(traj_weight_arrays, axis=0)
-
-    if has_policy:
-        policy_cmd_arrays = np.stack(policy_cmd_arrays, axis=0)
-
-    action_arrays = np.stack(action_arrays, axis=0)
-    state_arrays = np.stack(state_arrays, axis=0)
-    episode_ends_arrays = np.array(episode_ends_arrays)
-    ext_torque_arrays = np.stack(ext_torque_arrays, axis=0)
-    robot_timestamp_arrays = np.array(robot_timestamp_arrays, dtype=np.int64)
-
-
-    compressor = zarr.Blosc(cname="zstd", clevel=3, shuffle=1)
-    if has_images:
-        front_img_chunk_size = (
-            CHUNK_SIZE,
-            front_img_arrays.shape[1],
-            front_img_arrays.shape[2],
-            front_img_arrays.shape[3],
-        )
-        wrist_img_chunk_size = (
-            CHUNK_SIZE,
-            wrist_img_arrays.shape[1],
-            wrist_img_arrays.shape[2],
-            wrist_img_arrays.shape[3],
-        )
-        img_episode_ends_chunk_size = (
-            CHUNK_SIZE,
-        )
-        
-    if has_pointclouds:
-        point_cloud_chunk_size = (
-            CHUNK_SIZE,
-            point_cloud_arrays.shape[1],
-            point_cloud_arrays.shape[2],
-        )
-
-    if has_weights:
-        traj_weights_chunk_size = (
-            CHUNK_SIZE,
-        )
-
-    if has_policy:
-        policy_chunk_size = (CHUNK_SIZE, 7) # assuming base policy gives jp only
-    
-    # depth_chunk_size = (CHUNK_SIZE, depth_arrays.shape[1], depth_arrays.shape[2])
-    if len(action_arrays.shape) == 2:
-        action_chunk_size = (CHUNK_SIZE, action_arrays.shape[1])
-    elif len(action_arrays.shape) == 3:
-        action_chunk_size = (CHUNK_SIZE, action_arrays.shape[1], action_arrays.shape[2])
-    else:
-        raise NotImplementedError
-
-    # NOTE: assuming 7dof robot
-    ext_torque_chunk_size = (CHUNK_SIZE, 7)
-    low_dim_data.create_dataset(
-        "robot_timestamp_ns", data=robot_timestamp_arrays,
-        chunks=(CHUNK_SIZE,),
-        dtype="int64", overwrite=True, compressor=compressor,
-    )
-    
-    if has_images:
-        img_data.create_dataset(
-            "front_img",
-            data=front_img_arrays,
-            chunks=front_img_chunk_size,
-            dtype="uint8",
-            overwrite=True,
-            compressor=compressor,
-        )
-        img_data.create_dataset(
-            "wrist_img",
-            data=wrist_img_arrays,
-            chunks=wrist_img_chunk_size,
-            dtype="uint8",
-            overwrite=True,
-            compressor=compressor,
-        )
         img_meta.create_dataset(
             "episode_ends",
             data=img_episode_ends_arrays,
-            chunks=img_episode_ends_chunk_size,
+            chunks=(CHUNK_SIZE,),
             dtype="int64",
             overwrite=True,
             compressor=compressor,
         )
-        img_data.create_dataset(
-            "img_timestamp_ns", data=image_timestamp_arrays,
-            chunks=(CHUNK_SIZE,),
-            dtype="int64", overwrite=True, compressor=compressor,
-        )
     
-    if has_pointclouds:
-        low_dim_data.create_dataset(
-            "point_cloud",
-            data=point_cloud_arrays,
-            chunks=point_cloud_chunk_size,
-            dtype="float64",
-            overwrite=True,
-            compressor=compressor,
-        )
-        
-    if has_weights:
-        low_dim_data.create_dataset('traj_weight',
-             data=traj_weight_arrays,
-             dtype='float32',
-             chunks=traj_weights_chunk_size,
-             overwrite=True,
-             compressor=compressor
-        )
-
-    if has_policy:
-        low_dim_data.create_dataset('policy_cmd',
-             data=policy_cmd_arrays,
-             dtype='float32',
-             chunks=policy_chunk_size,
-             overwrite=True,
-             compressor=compressor
-        )
-
-    low_dim_data.create_dataset(
-        "action",
-        data=action_arrays,
-        chunks=action_chunk_size,
-        dtype="float32",
-        overwrite=True,
-        compressor=compressor,
-    )
-    low_dim_data.create_dataset(
-        "state",
-        data=state_arrays,
-        chunks=(CHUNK_SIZE, state_arrays.shape[1]),
-        dtype="float32",
-        overwrite=True,
-        compressor=compressor,
-    )
     low_dim_meta.create_dataset(
         "episode_ends",
         data=episode_ends_arrays,
@@ -495,66 +431,6 @@ if __name__ == "__main__":
         overwrite=True,
         compressor=compressor,
     )
-    low_dim_data.create_dataset(
-        "ext_torque",
-        data=ext_torque_arrays,
-        chunks=ext_torque_chunk_size,
-        dtype="float32",
-        overwrite=True,
-        compressor=compressor,
-    )
 
-
-    # print shape
-    if has_images:
-        cprint(
-            f"front img shape: {front_img_arrays.shape}, range: [{np.min(front_img_arrays)}, {np.max(front_img_arrays)}]",
-            "green",
-        )
-        cprint(
-            f"wrist img shape: {wrist_img_arrays.shape}, range: [{np.min(wrist_img_arrays)}, {np.max(wrist_img_arrays)}]",
-            "green",
-        )
-        cprint(
-            f"img_episode_ends shape: {img_episode_ends_arrays.shape}, range: [{np.min(img_episode_ends_arrays)}, {np.max(img_episode_ends_arrays)}]",
-            "green",
-        )
-        cprint(
-            f"image_timestamp_ns shape: {image_timestamp_arrays.shape}, range: [{np.min(image_timestamp_arrays)}, {np.max(image_timestamp_arrays)}]",
-            "green",
-        )
-        
-    if has_pointclouds:
-        cprint(
-            f"point_cloud shape: {point_cloud_arrays.shape}, range: [{np.min(point_cloud_arrays)}, {np.max(point_cloud_arrays)}]",
-            "green",
-        )
-
-    if has_weights:
-        cprint(
-            f"weight shape: {traj_weight_arrays.shape}, range: [{np.min(traj_weight_arrays)}, {np.max(traj_weight_arrays)}]",
-            "green",
-        )
-        
-    cprint(
-        f"action shape: {action_arrays.shape}, range: [{np.min(action_arrays)}, {np.max(action_arrays)}]",
-        "green",
-    )
-    cprint(
-        f"state shape: {state_arrays.shape}, range: [{np.min(state_arrays)}, {np.max(state_arrays)}]",
-        "green",
-    )
-    cprint(
-        f"episode_ends shape: {episode_ends_arrays.shape}, range: [{np.min(episode_ends_arrays)}, {np.max(episode_ends_arrays)}]",
-        "green",
-    )
-    cprint(
-        f"ext_torque shape: {ext_torque_arrays.shape}, range: [{np.min(ext_torque_arrays)}, {np.max(ext_torque_arrays)}]",
-        "green",
-    )
-    cprint(
-        f"robot_timestamp_ns shape: {robot_timestamp_arrays.shape}, range: [{np.min(robot_timestamp_arrays)}, {np.max(robot_timestamp_arrays)}]",
-        "green",
-    )
     cprint(f"total_count: {total_count}", "green")
     cprint(f"Saved zarr file to {save_data_path}", "green")

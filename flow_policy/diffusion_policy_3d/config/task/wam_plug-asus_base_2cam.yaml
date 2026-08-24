@@ -1,6 +1,6 @@
-name: wam_pandp-solo-cup_base_2cam
+name: wam_plug-asus_base_2cam
 
-task_name: wam_pandp-solo-cup_base_2cam
+task_name: wam_plug-asus_base_2cam
 
 image_shape: &image_shape [3, 224, 224]
 
@@ -31,7 +31,7 @@ shape_meta: &shape_meta
         # how long things take = (down_sample_steps * (horizon - 1))/hz
         state: # last 0.02s of low_dim
           horizon: 3
-          down_sample_steps: 1
+          down_sample_steps: 25
           source: low_dim
         front_img: # just use 1 image
           horizon: 1
@@ -44,7 +44,7 @@ shape_meta: &shape_meta
     action:
       sparse:
         horizon: ${horizon}
-        down_sample_steps: 1
+        down_sample_steps: 25
 
 env_runner:
   _target_: diffusion_policy_3d.env_runner.udp_runner.UdpRunner
@@ -65,12 +65,12 @@ env_runner:
 # horizon: how many steps to look ahead(action) or back(obs) after downsample for the given usage
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_async_dataset.LabRealAsyncDataset
-  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-solo-cup_nodmp-100-1.zarr
+  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_plug-asus-153_nocorr-1.zarr
   shape_meta: *shape_meta
   action_padding: False
   query_frequency_down_sample_steps: 1 # paper has this as 8 but we do our own downsampling in the data conversion script
   correction_upsampling:
-    enabled: True
+    enabled: False
     threshold: 1.0 # importance power
     lookback_horizon: 5         # how many frames back to check for the "was in correction" average
     lookback_down_sample_steps: 1
