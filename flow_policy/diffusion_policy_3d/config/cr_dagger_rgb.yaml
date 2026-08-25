@@ -46,6 +46,8 @@ policy:
     fuse_mode: modality-attention
     reduce_pretrained_lr: True
 
+    base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_plug-asus_base_2cam/checkpoints/wam_plug-asus_base_2cam-epoch=0500-test_mean_score=-0.003.ckpt 
+
     ##### from scratch #####
     # model_name: 'vit_base_patch16_224'
     # model_name: 'resnet34'
@@ -60,8 +62,8 @@ policy:
       # model_name: 'resnet34.a1_in1k'
       model_name: 'vit_base_patch32_clip_224.openai'
       # model_name: 'convnext_base.clip_laion2b_augreg_ft_in12k'
-      pretrained: False
-      frozen: False
+      pretrained: True
+      frozen: True
       global_pool: ''
 
       # 'avg' or 'max' or 'soft_attention' or 'spatial_embedding' or 'transformer' or 'attention_pool_2d'

@@ -101,10 +101,6 @@ class TrainCrDaggerWorkspace(BaseWorkspace):
         if getattr(cfg.training, 'resume', False) and lastest_ckpt_path.is_file():
             cprint(f"Resuming training run from local checkpoint {lastest_ckpt_path}", "green")
             self.load_checkpoint(path=lastest_ckpt_path)
-        elif getattr(cfg.training, 'sirius_finetune', False):
-            # Load the checkpoint but NOT previous optimizer to tune with sirius.
-            pretrained_ckpt_path = pathlib.Path(cfg.training.finetune_checkpoint_path)
-            self.load_checkpoint(path=pretrained_ckpt_path, include_keys=[], exclude_keys=["optimizer"])
 
         # configure dataset
         dataset: BaseDataset

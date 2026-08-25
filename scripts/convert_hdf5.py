@@ -25,7 +25,7 @@ GRIPPER_ACTION_THRESHOLD = -0.15
 
 IMPORTANCE_POWER = 1  #  changes the spread of the traj_weight
  
-TARGET_FPS = 250
+TARGET_FPS = 500
 TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
 
 IMG_TARGET_FPS = 30

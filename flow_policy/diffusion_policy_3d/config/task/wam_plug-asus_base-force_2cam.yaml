@@ -30,13 +30,13 @@ shape_meta: &shape_meta
         # horizon: how many downsampled steps to look back, for this usage
         # low dim data is 500hz (https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/online_learning/configs/config_v1.py#L18) and img data is 60hz (https://github.com/yifan-hou/cr-dagger/blob/main/PyriteUtility/PyriteUtility/hardware_interface/multi_uvc_camera.py).
         # how long things take = (down_sample_steps * (horizon - 1))/hz
-        state: # last 0.02s of low_dim
+        state: # last 0.2s of low_dim
           horizon: 3
-          down_sample_steps: 25
+          down_sample_steps: 50
           source: low_dim
-        ext_torque: # last 0.248s of low_dim
+        ext_torque: # last 0.504s of low_dim
           horizon: 64
-          down_sample_steps: 2
+          down_sample_steps: 4
           source: low_dim
         front_img: # just use 1 image
           horizon: 1
@@ -49,7 +49,7 @@ shape_meta: &shape_meta
     action:
       sparse:
         horizon: ${horizon}
-        down_sample_steps: 2
+        down_sample_steps: 4
 
 
 env_runner:

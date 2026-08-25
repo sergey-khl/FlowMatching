@@ -7,8 +7,7 @@
 # DONE: collect data at 500 hz or at least 128. base willl run at 1hz and res at 50
 # DONE: collect img timestamps. these are used as the base index for the sampler
 # DONE: torque is ema at 500 windows with removed offset
-# https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/workspace/train_residual_mlp_workspace.py#L51
-# ^^ to load base policy checkpoint
+# DONE: https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/workspace/train_residual_mlp_workspace.py#L51 << to load base policy checkpoint
 # rc jp actoins should be diffs to match
 #
 #

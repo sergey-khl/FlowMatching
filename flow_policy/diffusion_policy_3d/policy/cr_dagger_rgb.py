@@ -86,7 +86,6 @@ class CrDaggerRGB(BasePolicy):
             for key in self.rgb_keys:
                 obs_shape_meta[key]['shape'][0] = 1
 
-
         obs_feature_dim = np.prod(obs_encoder.output_shape())
 
         self.residual = MLP(

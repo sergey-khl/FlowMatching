@@ -1,5 +1,6 @@
 # from https://github.com/yifan-hou/cr-dagger/blob/main/PyriteML/diffusion_policy/model/vision/timm_obs_encoder_with_force.py
 import copy
+import os
 
 import timm
 import math
@@ -69,6 +70,7 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
         shape_meta: dict,
         fuse_mode: str,
         reduce_pretrained_lr: bool,
+        base_policy_ckpt: str = "",
         vision_encoder_cfg: dict = None,
         force_encoder_cfg: dict = None,
         # replace BatchNorm with GroupNorm
@@ -350,6 +352,19 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
                     self.position_embedding = torch.nn.Parameter(
                         torch.randn(n_v_features + n_f_features, max(self.v_feature_dim, self.f_feature_dim))
                     )
+
+        # https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/workspace/train_residual_mlp_workspace.py#L51
+        if os.path.exists(base_policy_ckpt):
+            print(f"==> loading pretrained weights from {base_policy_ckpt}")
+            base_policy_ckpt = torch.load(base_policy_ckpt)['state_dicts']['model']
+            for key in self.rgb_keys:
+                key_prefix = f"obs_encoder.key_model_map.{key}"
+                for model_key in base_policy_ckpt.keys():
+                    if model_key.startswith(key_prefix):
+                        self.key_model_map[key].load_state_dict(
+                            {model_key[len(key_prefix)+1:]: base_policy_ckpt[model_key]}
+                        , strict=False)
+                self.key_model_map[key].requires_grad_(False)        # freeze the encoder
 
     def aggregate_feature(self, model_name, agg_mode, feature):
         """
