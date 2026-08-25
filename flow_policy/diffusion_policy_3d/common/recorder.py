@@ -8,6 +8,11 @@ import torch
 from scipy.spatial.transform import Rotation as R
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 
+LOW_DIM_BASE_HZ = 250
+IMG_BASE_HZ = 10
+LOW_DIM_BASE_DT_NS = int(1e9 / LOW_DIM_BASE_HZ)
+IMG_BASE_DT_NS = int(1e9 / IMG_BASE_HZ)
+
 class Recorder:
     def __init__(self, save_dir="./dataset"):
         self.save_dir = save_dir
@@ -89,55 +94,55 @@ class Recorder:
         self.clear()
 
     def _quat_to_rotmat(self, quat_wxyz):
-        """Quaternion [w, x, y, z] -> first two rows of the rotation matrix, flattened (6,)."""
+        """Quaternion [w, x, y, z] -> first two rows of the rotation matrix"""
         quat_xyzw = np.roll(np.asarray(quat_wxyz), -1, axis=-1)
         rotmat = R.from_quat(quat_xyzw).as_matrix()
         return rotmat[:2, :].reshape(6)
 
-    def _nearest_low_dim_idx(self, query_time):
-        low_dim_time = np.asarray(self.low_dim_data["timestamp_ns"])
-        idx = int(np.searchsorted(low_dim_time, query_time))
-        return min(idx, len(low_dim_time) - 1)
+    def _downsample_grid_indices(self, timestamps_ns, target_dt_ns):
+        """global downsample. fullfilling role of sparse_query_frequency_down_sample_steps"""
+        timestamps_ns = np.asarray(timestamps_ns)
+        t0, t1 = timestamps_ns[0], timestamps_ns[-1]
+        if t1 <= t0:
+            return np.array([0], dtype=np.int64)
 
-    def _nearest_img_idx(self, cam_name, query_time):
-        ts = np.asarray(self.image_data[cam_name]["timestamp_ns"])
-        idx = int(np.searchsorted(ts, query_time))
-        return min(idx, len(ts) - 1)
+        target_times = np.arange(t0, t1 + 1, target_dt_ns)
+        idxs = np.searchsorted(timestamps_ns, target_times)
+        idxs = np.clip(idxs, 0, len(timestamps_ns) - 1)
+        left = np.clip(idxs - 1, 0, len(timestamps_ns) - 1)
+        use_left = np.abs(timestamps_ns[left] - target_times) < np.abs(timestamps_ns[idxs] - target_times)
+        idxs = np.where(use_left, left, idxs)
+        return np.unique(idxs).astype(np.int64)
 
-    def _slice_state_backward(self, anchor_time, horizon, down_sample_steps):
-        center_idx = self._nearest_low_dim_idx(anchor_time)
-        span = (horizon - 1) * down_sample_steps
-        if center_idx < span:
-            return None  # not enough history... dont infer
+    def _match_nearest_indices(self, query_timestamps, ref_timestamps):
+        """sync 2 diff data stereams"""
+        query_timestamps = np.asarray(query_timestamps)
+        ref_timestamps = np.asarray(ref_timestamps)
+        idxs = np.searchsorted(ref_timestamps, query_timestamps)
+        idxs = np.clip(idxs, 1, len(ref_timestamps) - 1)
+        left = ref_timestamps[idxs - 1]
+        right = ref_timestamps[idxs]
+        idxs = idxs - (np.abs(query_timestamps - left) < np.abs(query_timestamps - right))
+        return idxs
 
-        ids = np.arange(center_idx - span, center_idx + 1, down_sample_steps)
-
+    def _gather_state(self, raw_ids):
         leader_jp = np.asarray(self.low_dim_data["leader_jp"])            # (N,7)
         leader_cart_pos = np.asarray(self.low_dim_data["leader_cart_pos"])  # (N,3)
         leader_quat = np.asarray(self.low_dim_data["leader_quat_wxyz"])     # (N,4)
-
         rows = [
             np.concatenate([
                 leader_jp[i],
                 leader_cart_pos[i],
                 self._quat_to_rotmat(leader_quat[i]),
             ]).astype(np.float32)
-            for i in ids
+            for i in raw_ids
         ]
         return np.stack(rows, axis=0)  # (horizon, 16)
 
-    def _slice_img_backward(self, cam_name, anchor_time, horizon, down_sample_steps):
-        cam_data = self.image_data[cam_name]
-        center_idx = self._nearest_img_idx(cam_name, anchor_time)
-        span = (horizon - 1) * down_sample_steps
-        if center_idx < span:
-            return None  # not enough history... dont infer
-
-        ids = np.arange(center_idx - span, center_idx + 1, down_sample_steps)
-
+    def _gather_images(self, cam_data, raw_ids):
         frames = [
-            cam_data["images"][i].transpose(2, 0, 1).astype(np.float32)
-            for i in ids
+            cam_data["images"][i].transpose(2, 0, 1).astype(np.float32)  # HWC -> CHW
+            for i in raw_ids
         ]
         return np.stack(frames, axis=0)  # (horizon, 3, 224, 224)
 
@@ -152,26 +157,56 @@ class Recorder:
         if not self.low_dim_data.get("timestamp_ns") or not self.low_dim_data.get("leader_jp"):
             return None
 
-        anchor_time = front["timestamp_ns"][-1]
+        front_ts_raw = np.asarray(front["timestamp_ns"])
+        wrist_ts_raw = np.asarray(wrist["timestamp_ns"])
+        low_dim_ts_raw = np.asarray(self.low_dim_data["timestamp_ns"])
 
+        # global downsample based on front image ts as anchor
+        front_ds_idx = self._downsample_grid_indices(front_ts_raw, IMG_BASE_DT_NS)
+        front_ts_ds = front_ts_raw[front_ds_idx]
+
+        # sync wrist images to fron image.
+        wrist_ds_idx = self._match_nearest_indices(front_ts_ds, wrist_ts_raw)
+
+        # same thing for low dim
+        low_dim_ds_idx = self._downsample_grid_indices(low_dim_ts_raw, LOW_DIM_BASE_DT_NS)
+        low_dim_ts_ds = low_dim_ts_raw[low_dim_ds_idx]
+
+        img_center = len(front_ts_ds) - 1
+        anchor_time = front_ts_ds[img_center]
+
+        low_dim_center = int(self._match_nearest_indices(
+            np.array([anchor_time]), low_dim_ts_ds
+        )[0])
+
+        # get downsapmled horizon worth of each obs and action item
         obs_result = {}
         for key, cfg in obs_key_horizons.items():
             horizon = cfg["horizon"]
             down_sample_steps = cfg.get("down_sample_steps", 1)
             source = cfg.get("source", "low_dim")
+            span = (horizon - 1) * down_sample_steps
 
             if source == "low_dim":
-                sliced = self._slice_state_backward(anchor_time, horizon, down_sample_steps)
-            else:
-                sliced = self._slice_img_backward(key, anchor_time, horizon, down_sample_steps)
-
-            if sliced is None:
-                return None
-
-            obs_result[key] = sliced
+                if low_dim_center < span:
+                    return None
+                ds_ids = np.arange(low_dim_center - span, low_dim_center + 1, down_sample_steps)
+                raw_ids = low_dim_ds_idx[ds_ids]
+                obs_result[key] = self._gather_state(raw_ids)
+            else:  # img
+                if img_center < span:
+                    return None
+                ds_ids = np.arange(img_center - span, img_center + 1, down_sample_steps)
+                if key == "front_img":
+                    raw_ids = front_ds_idx[ds_ids]
+                    obs_result[key] = self._gather_images(front, raw_ids)
+                elif key == "wrist_img":
+                    raw_ids = wrist_ds_idx[ds_ids]
+                    obs_result[key] = self._gather_images(wrist, raw_ids)
+                else:
+                    raise ValueError(f"get_obs_dict: unrecognized image obs key '{key}'")
 
         return dict_apply(
             obs_result,
             lambda x: torch.from_numpy(x).unsqueeze(0).to(device=device, dtype=dtype),
         )
-

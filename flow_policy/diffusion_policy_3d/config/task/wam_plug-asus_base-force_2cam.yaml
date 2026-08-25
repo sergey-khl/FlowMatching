@@ -63,9 +63,8 @@ env_runner:
   dof: 7
   loop_hz: 10
   debug: False
-  n_obs_steps: ${n_obs_steps}
+  shape_meta: *shape_meta
   n_action_steps: ${n_action_steps}
-  horizon: ${horizon}
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_async_dataset.LabRealAsyncDataset

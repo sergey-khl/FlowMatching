@@ -23,7 +23,7 @@ from diffusion_policy_3d.common.udp_handler import TeleopUDPHandler
 from diffusion_policy_3d.common.recorder import Recorder
 import torchvision
  
-class UdpRunner(BaseRunner):
+class BaseUdpRunner(BaseRunner):
     def __init__(self,
                  output_dir: str,
                 remote_ip: str,
@@ -238,12 +238,17 @@ class UdpRunner(BaseRunner):
                     if new_frames:
                         self._handle_new_frames(new_frames)
 
-                    # GET OBS_DICT HERE
+                    obs_dict = self.recorder.get_obs_dict(
+                        self.obs_key_horizons, device=device, dtype=dtype
+                    )
 
-                    time_to_chunk_end_s = time_to_chunk_end_ns / 1e9
-                    interval_elapsed = (time.time() - self.last_send_time) >= self.send_interval
+                    if len(new_states) > 0 and obs_dict is not None:
+                        time_to_chunk_end_s = new_states[-1]["time_to_chunk_end_ns"] / 1e9
+                        interval_elapsed = (time.time() - self.last_send_time) >= self.send_interval
 
-                    should_infer = (time_to_chunk_end_s <= self.inference_time) and interval_elapsed
+                        should_infer = (time_to_chunk_end_s <= self.inference_time) and interval_elapsed
+                    else:
+                        should_infer = False
 
                     if should_infer:
                         t_infer_start = time.monotonic()
