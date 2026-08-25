@@ -1,5 +1,8 @@
 import socket
 import struct
+import queue
+import threading
+import time
 
 
 class RecorderReceiver:
@@ -11,13 +14,19 @@ class RecorderReceiver:
         self.dof = dof
         self.recv_port = recv_port
 
-        # 7 DOF-length arrays + follower(cart_pos 3 + quat 4) + leader(cart_pos 3 + quat 4)
+        # 13 DOF-length arrays:
+        #   follower_jp, follower_jv, follower_dyngravcomp_torque,
+        #   environment_torque, filtered_environment_torque,
+        #   leader_jp, leader_jv, leader_dyngravcomp_torque,
+        #   human_torque, filtered_human_torque,
+        #   policyJp, policyJt, policyTorqueScale
+        # + follower(cart_pos 3 + quat 4) + leader(cart_pos 3 + quat 4)
         # + gripper_pos + gripper_vel + gripper_torque
         # 'Q'  = time_to_chunk_end (ns)
-        # 'Q'  = uint64_t (timestamp)
-        # bytes: 544
-        num_doubles = (7 * self.dof) + 17
-        self.fmt = f"<{num_doubles}dQQ"
+        # bytes: 872        
+
+        num_doubles = (13 * self.dof) + 17
+        self.fmt = f"<{num_doubles}dQ"
         self.packet_size = struct.calcsize(self.fmt)
 
         # Receiver Socket
@@ -32,62 +41,84 @@ class RecorderReceiver:
             print(f"Error binding to port {self.recv_port}: {e}")
             self.sock_recv = None
 
-    def receive_latest_data(self):
-        """
-        Drains the OS UDP buffer and returns ONLY the most recent packet.
-        This ensures Python doesn't fall behind the high-frequency C++ control loop.
-        """
-        if not self.sock_recv:
-            return None
+        self.sock_recv.setblocking(True)
+        self.sock_recv.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
+        self.q = queue.Queue(maxsize=100)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._recv_loop, daemon=True)
+        self._thread.start()
 
-        latest_data = None
-
-        while True:
+    def _recv_loop(self):
+        while not self._stop.is_set():
             try:
                 data, _ = self.sock_recv.recvfrom(1024)
-                if len(data) == self.packet_size:
-                    latest_data = data
-                else:
-                    print(f"⚠️ Dropping packet! Expected {self.packet_size} bytes, got {len(data)} bytes.")
-            except BlockingIOError:
-                break  # Buffer is empty
-            except Exception as e:
-                print(f"Receive Error: {e}")
+            except OSError:
                 break
+            if len(data) == self.packet_size:
+                try:
+                    self.q.put_nowait(data)
+                except queue.Full:
+                    self.q.get_nowait()
+                    self.q.put_nowait(data)
+            else:
+                print(f"⚠️ Dropping packet! Expected {self.packet_size} bytes, got {len(data)} bytes.")
+                    
+    def receive_all_new(self):
+        """Returns every packet since the last call, unpacked, in order."""
+        packets = []
+        while True:
+            try:
+                data = self.q.get_nowait()
+            except queue.Empty:
+                break
+            packets.append(self._unpack(data))
+        return packets
 
+    def _unpack(self, data):
         # If we didn't get any valid data this loop, return None
-        if latest_data is None:
+        if data is None:
             return None
 
         # Unpack the freshest packet
-        unpacked = struct.unpack(self.fmt, latest_data)
+        unpacked = struct.unpack(self.fmt, data)
 
         dof = self.dof
 
         idx_follower_jp = 0
         idx_follower_jv = dof
-        idx_follower_ext_tau = dof * 2
-        idx_leader_jp = dof * 3
-        idx_leader_jv = dof * 4
-        idx_leader_ext_tau = dof * 5
-        idx_policy_torque_scale = dof * 6
-        idx_follower_cart_pos = dof * 7
-        idx_follower_quat = dof * 7 + 3
-        idx_leader_cart_pos = dof * 7 + 7
-        idx_leader_quat = dof * 7 + 10
-        idx_gripper_pos = dof * 7 + 14
-        idx_gripper_vel = dof * 7 + 15
-        idx_gripper_torque = dof * 7 + 16
-        idx_time_to_chunk_end = dof * 7 + 17
-        idx_timestamp = dof * 7 + 18
+        idx_follower_dyngravcomp_torque = dof * 2
+        idx_environment_torque = dof * 3
+        idx_filtered_environment_torque = dof * 4
+        idx_leader_jp = dof * 5
+        idx_leader_jv = dof * 6
+        idx_leader_dyngravcomp_torque = dof * 7
+        idx_human_torque = dof * 8
+        idx_filtered_human_torque = dof * 9
+        idx_policy_jp = dof * 10
+        idx_policy_jt = dof * 11
+        idx_policy_torque_scale = dof * 12
+        idx_follower_cart_pos = dof * 13
+        idx_follower_quat = dof * 13 + 3
+        idx_leader_cart_pos = dof * 13 + 7
+        idx_leader_quat = dof * 13 + 10
+        idx_gripper_pos = dof * 13 + 14
+        idx_gripper_vel = dof * 13 + 15
+        idx_gripper_torque = dof * 13 + 16
+        idx_time_to_chunk_end = dof * 13 + 17
  
         return {
             "follower_jp": list(unpacked[idx_follower_jp:idx_follower_jv]),
-            "follower_jv": list(unpacked[idx_follower_jv:idx_follower_ext_tau]),
-            "follower_ext_torque": list(unpacked[idx_follower_ext_tau:idx_leader_jp]),
+            "follower_jv": list(unpacked[idx_follower_jv:idx_follower_dyngravcomp_torque]),
+            "follower_dyngravcomp_torque": list(unpacked[idx_follower_dyngravcomp_torque:idx_environment_torque]),
+            "environment_torque": list(unpacked[idx_environment_torque:idx_filtered_environment_torque]),
+            "filtered_environment_torque": list(unpacked[idx_filtered_environment_torque:idx_leader_jp]),
             "leader_jp": list(unpacked[idx_leader_jp:idx_leader_jv]),
-            "leader_jv": list(unpacked[idx_leader_jv:idx_leader_ext_tau]),
-            "leader_ext_torque": list(unpacked[idx_leader_ext_tau:idx_policy_torque_scale]),
+            "leader_jv": list(unpacked[idx_leader_jv:idx_leader_dyngravcomp_torque]),
+            "leader_dyngravcomp_torque": list(unpacked[idx_leader_dyngravcomp_torque:idx_human_torque]),
+            "human_torque": list(unpacked[idx_human_torque:idx_filtered_human_torque]),
+            "filtered_human_torque": list(unpacked[idx_filtered_human_torque:idx_policy_jp]),
+            "policy_jp": list(unpacked[idx_policy_jp:idx_policy_jt]),
+            "policy_jt": list(unpacked[idx_policy_jt:idx_policy_torque_scale]),
             "policy_torque_scale": list(unpacked[idx_policy_torque_scale:idx_follower_cart_pos]),
             "follower_cart_pos": list(unpacked[idx_follower_cart_pos:idx_follower_quat]),
             "follower_quat_wxyz": list(unpacked[idx_follower_quat:idx_leader_cart_pos]),
@@ -97,10 +128,10 @@ class RecorderReceiver:
             "gripper_vel": unpacked[idx_gripper_vel],
             "gripper_torque": unpacked[idx_gripper_torque],
             "time_to_chunk_end_ns": unpacked[idx_time_to_chunk_end],
-            "timestamp_ns": unpacked[idx_timestamp],
+            "timestamp_ns": time.time_ns(), # C++ clock is not compatible with the way we should be using timestamps
         }
+
     def close(self):
         if self.sock_recv:
             self.sock_recv.close()
-
 

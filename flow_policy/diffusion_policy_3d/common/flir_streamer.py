@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 import threading
 import time
 from genicam.gentl import TimeoutException
@@ -14,6 +13,7 @@ def buffer_to_image(buffer):
     data_format = component.data_format
 
     raw_data = component.data.copy()
+
 
     if "Mono" in data_format:
         return raw_data.reshape((height, width))
@@ -56,6 +56,8 @@ class FLIRStream:
             self.device = self.harvester.create_image_acquirer()
 
         self.latest_image = None
+        self.frame_id = 0
+        self.latest_ts_ns = None
         self.running = False
         self.lock = threading.Lock()
         self.thread = None
@@ -76,6 +78,8 @@ class FLIRStream:
                     img = buffer_to_image(buffer)
                     with self.lock:
                         self.latest_image = img
+                        self.frame_id += 1
+                        self.latest_ts_ns = time.time_ns()
             except TimeoutException:
                 continue
             except Exception as e:
@@ -87,19 +91,28 @@ class FLIRStream:
                     )
                     time.sleep(0.05)
 
-    def read(self):
+    def read(self, last_seen_id):
         with self.lock:
-            if self.latest_image is not None:
-                return self.latest_image.copy()
-            return None
+            if self.latest_image is not None and self.frame_id != last_seen_id:
+                return self.latest_image.copy(), self.frame_id, self.latest_ts_ns
+            return None, last_seen_id, None
 
     def stop(self):
         self.running = False
-        if self.thread is not None:
-            self.thread.join(timeout=1.0)
         try:
             self.device.stop_image_acquisition()
-            # CRITICAL: Clean up the GenTL node so the camera isn't locked on next run
+        except Exception as e:
+            cprint(f"Error stopping acquisition on {self.serial_num}: {e}", "red")
+
+        if self.thread is not None:
+            self.thread.join(timeout=2.0)
+            if self.thread.is_alive():
+                cprint(f"WARNING: FLIR thread {self.serial_num} did not exit, "
+                        f"skipping destroy() to avoid hang", "red")
+                return
+
+        try:
             self.device.destroy()
         except Exception as e:
             cprint(f"Error closing FLIR camera {self.serial_num}: {e}", "red")
+

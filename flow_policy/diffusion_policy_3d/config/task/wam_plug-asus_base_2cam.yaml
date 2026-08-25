@@ -57,9 +57,8 @@ env_runner:
   dof: 7
   loop_hz: 10
   debug: False
-  n_obs_steps: ${n_obs_steps}
+  shape_meta: *shape_meta
   n_action_steps: ${n_action_steps}
-  horizon: ${horizon}
 
 # down_sample_steps: how many steps to skip in the raw data for the given usage
 # horizon: how many steps to look ahead(action) or back(obs) after downsample for the given usage
