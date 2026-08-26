@@ -21,7 +21,7 @@ CHUNK_SIZE = 100
 POS_THRESHOLD = 0.0005
 ROT_THRESHOLD = 0.0002
 
-GRIPPER_ACTION_THRESHOLD = -0.15
+GRIPPER_ACTION_THRESHOLD = -0.13
 
 IMPORTANCE_POWER = 1  #  changes the spread of the traj_weight
  
@@ -164,8 +164,8 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/plug_asus_153"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_plug-asus-153_nocorr-{IMPORTANCE_POWER}.zarr"
+    expert_data_paths = ["/mnt/10tb/serg/datasets/plug_asus_81/"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_plug-asus-81_nocorr-{IMPORTANCE_POWER}.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -246,11 +246,6 @@ if __name__ == "__main__":
         policy_cmd = low_dim["policy_jp"][:] # (N, 7)
         human_torque = low_dim["human_torque"][:]        # (N, 4) w,x,y,z
 
-        # robot and images captured with different unix time thing
-        front_timestamps_ns_raw = images["front_image"]["front_img_timestamp_ns"][:]
-        clock_offset_ns = int(front_timestamps_ns_raw[0]) - int(timestamps_ns[0])
-        timestamps_ns = timestamps_ns + clock_offset_ns
-
         idxs = downsample_by_timestamp(timestamps_ns, TARGET_DT_NS)
 
         jp_ds = jp[idxs]
@@ -319,7 +314,7 @@ if __name__ == "__main__":
                 # quats_ds[j + 1],
                 # delta_pos,
                 jp_ds[j + 1],
-                human_torque_ds[j + 1],
+                # human_torque_ds[j + 1],
                 # [gripper_action],
             ]).astype(np.float32)  # (7,)
  

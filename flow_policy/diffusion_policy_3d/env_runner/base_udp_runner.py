@@ -21,6 +21,7 @@ from diffusion_policy_3d.common.multi_flir_manager import MultiFLIRManager
 from diffusion_policy_3d.common.precise_sleep import precise_wait
 from diffusion_policy_3d.common.udp_handler import TeleopUDPHandler
 from diffusion_policy_3d.common.recorder import Recorder
+from diffusion_policy_3d.common.camera_viewer import CameraViewer
 import torchvision
 
 def preprocess_image(image):
@@ -61,10 +62,10 @@ class BaseUdpRunner(BaseRunner):
         self.obs_key_horizons = shape_meta['sample']['obs']['sparse']
         self.past_actions = None
 
-        self.send_interval = 0.4  # after sending dont do anythign for at least this amount of time
+        self.send_interval = 0.2  # after sending dont do anythign for at least this amount of time
         self.last_send_time = 0.0
 
-        self.inference_time = 1.0          # estimate of how long inf takes
+        self.inference_time = 0.1          # estimate of how long inf takes
         self.inference_time_alpha = 0.2    # EMA smoothing factor for the estimate
  
         # UDP comms - same helper classes used in main.py
@@ -77,11 +78,15 @@ class BaseUdpRunner(BaseRunner):
         )
 
         camera_configs = {
-            "wrist_img": wrist_cam_serial,
-            "front_img": front_cam_serial,
+            "wrist_img": {"serial": "18475182", "exposure_time": 12000, "gain": 8, "fps": 45},
+            "front_img": {"serial": "18475176", "exposure_time": 7000, "gain": 8, "fps": 45},
         }
+
         self.camera_manager = MultiFLIRManager(camera_configs)
         self.camera_manager.start_all()
+
+        self.camera_viewer = CameraViewer(self.camera_manager, display_fps=30)
+        self.camera_viewer.start()
 
         self.loop_state = "IDLE"  # States: IDLE, INFER
 

@@ -8,8 +8,8 @@ import torch
 from scipy.spatial.transform import Rotation as R
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 
-LOW_DIM_BASE_HZ = 250
-IMG_BASE_HZ = 10
+LOW_DIM_BASE_HZ = 500
+IMG_BASE_HZ = 30
 LOW_DIM_BASE_DT_NS = int(1e9 / LOW_DIM_BASE_HZ)
 IMG_BASE_DT_NS = int(1e9 / IMG_BASE_HZ)
 
@@ -153,8 +153,10 @@ class Recorder:
         front = self.image_data.get("front_img")
         wrist = self.image_data.get("wrist_img")
         if not front or not front["images"] or not wrist or not wrist["images"]:
+            print("no images")
             return None
         if not self.low_dim_data.get("timestamp_ns") or not self.low_dim_data.get("leader_jp"):
+            print("no low dim")
             return None
 
         front_ts_raw = np.asarray(front["timestamp_ns"])
@@ -202,7 +204,7 @@ class Recorder:
                     obs_result[key] = self._gather_images(front, raw_ids)
                 elif key == "wrist_img":
                     raw_ids = wrist_ds_idx[ds_ids]
-                    obs_result[key] = self._gather_images(wrist, raw_ids)
+                    # obs_result[key] = self._gather_images(wrist, raw_ids)
                 else:
                     raise ValueError(f"get_obs_dict: unrecognized image obs key '{key}'")
 

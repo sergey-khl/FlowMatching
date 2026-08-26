@@ -12,8 +12,10 @@ class MultiFLIRManager:
         cprint("Initializing FLIR camera processes...", "green")
         self.streams = {}
         self.last_ids = {}
-        for name, serial in camera_configs.items():
-            self.streams[name] = FLIRProcessStream(serial, gentl_path)
+        for name, cfg in camera_configs.items():
+            serial = cfg["serial"]
+            camera_settings = {k: v for k, v in cfg.items() if k != "serial"}
+            self.streams[name] = FLIRProcessStream(serial, gentl_path, camera_settings=camera_settings)
             self.last_ids[name] = 0
 
     def start_all(self):

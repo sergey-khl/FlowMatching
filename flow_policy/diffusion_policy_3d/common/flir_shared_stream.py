@@ -34,9 +34,50 @@ def _convert_frame(raw, width, height, data_format):
     else:
         raise ValueError(f"Can't convert {data_format}")
 
+def _configure_camera(device, serial, camera_settings, error_queue):
+    """Use spinview to tweak"""
+    if not camera_settings:
+        return
+    try:
+        nm = device.remote_device.node_map
+
+        exposure_time = camera_settings.get("exposure_time")
+        gain = camera_settings.get("gain")
+        white_balance = camera_settings.get("white_balance")
+        fps = camera_settings.get("fps")
+
+        if exposure_time is not None:
+            nm.ExposureAuto.value = 'Off'
+            nm.ExposureTime.value = float(exposure_time)
+
+        if gain is not None:
+            nm.GainAuto.value = 'Off'
+            nm.Gain.value = float(gain)
+
+        if fps is not None:
+            nm.AcquisitionFrameRateEnable.value = True
+            nm.AcquisitionFrameRate = float(fps)
+
+        if white_balance is None:
+            nm.BalanceWhiteAuto.value = 'Continuous'
+        else:
+            nm.BalanceWhiteAuto.value = 'Off'
+            if isinstance(white_balance, (list, tuple)) and len(white_balance) == 2:
+                r, b = white_balance
+                nm.BalanceRatioSelector.value = 'Red'
+                nm.BalanceRatio.value = float(r)
+                nm.BalanceRatioSelector.value = 'Blue'
+                nm.BalanceRatio.value = float(b)
+
+        if fps is not None:
+            nm.AcquisitionFrameRateEnable.value = True
+            nm.AcquisitionFrameRate.value = float(fps)
+
+    except Exception as e:
+        error_queue.put(f"[{serial}] Warning setting config: {e}")
 
 def _flir_worker(serial, cti_path, startup_queue, frame_id, timestamp_ns,
-                  consumed, lock, running_event, error_queue):
+                  consumed, lock, running_event, error_queue, camera_settings=None):
     """
     Owns the camera entirely in its own process. Only converts/publishes a
     new frame once the parent has consumed the previous one -- this avoids
@@ -53,6 +94,8 @@ def _flir_worker(serial, cti_path, startup_queue, frame_id, timestamp_ns,
         harvester.add_cti_file(cti_path)
         harvester.update_device_info_list()
         device = harvester.create_image_acquirer(serial_number=str(serial))
+        _configure_camera(device, serial, camera_settings, error_queue)
+
         device.start_image_acquisition()
 
         while running_event.is_set():
@@ -116,9 +159,11 @@ class FLIRProcessStream:
     """
 
     def __init__(self, serial_num,
-                 cti_path="/opt/spinnaker/lib/spinnaker-gentl/Spinnaker_GenTL.cti"):
+                 cti_path="/opt/spinnaker/lib/spinnaker-gentl/Spinnaker_GenTL.cti",
+                 camera_settings: dict = None):
         self.serial_num = serial_num
         self.cti_path = cti_path
+        self.camera_settings = camera_settings
 
         self.frame_id = Value(ctypes.c_uint64, 0)
         self.timestamp_ns = Value(ctypes.c_uint64, 0)
@@ -138,7 +183,8 @@ class FLIRProcessStream:
             target=_flir_worker,
             args=(self.serial_num, self.cti_path, self.startup_queue,
                   self.frame_id, self.timestamp_ns, self.consumed,
-                  self.lock, self.running_event, self.error_queue),
+                  self.lock, self.running_event, self.error_queue,
+                  self.camera_settings),
             daemon=True,
         )
         self.process.start()

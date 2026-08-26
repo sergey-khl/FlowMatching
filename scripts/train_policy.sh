@@ -1,6 +1,7 @@
 # bash scripts/train_policy.sh train_dg_dagger dg_dagger_rgb wam_plug-asus_base_2cam 0001 0 0
 # bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_plug-asus_base_2cam 0001 0 0
-# bash scripts/train_policy.sh train_flow_matching rtc_flow_match_rgb wam_plug-asus_base_2cam 0001 0 0
+# bash scripts/train_policy.sh train_flow_matching rtc_flow_match_rgb wam_plug-asus_base_1cam 0001 0 0
+# bash scripts/train_policy.sh train_flow_matching rtc_flow_match_rgb wam_pandp-apple_base_2cam 0001 0 0
 # bash scripts/train_policy.sh train_flow_matching rtc_force_flow_match_rgb wam_plug-asus_base-force_2cam 0001 0 0
 
 # BEFORE RUNNING:
