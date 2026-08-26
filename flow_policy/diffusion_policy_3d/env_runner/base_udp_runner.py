@@ -22,6 +22,17 @@ from diffusion_policy_3d.common.precise_sleep import precise_wait
 from diffusion_policy_3d.common.udp_handler import TeleopUDPHandler
 from diffusion_policy_3d.common.recorder import Recorder
 import torchvision
+
+def preprocess_image(image):
+    img_size = (224, 224)
+
+    image = image.astype(np.float32)
+    image = torch.from_numpy(image).cuda()
+    image = image.permute(2, 0, 1)  # HxWx4 -> 4xHxW
+    image = torchvision.transforms.functional.resize(image, img_size)
+    image = image.permute(1, 2, 0)  # 4xHxW -> HxWx4
+    image = image.cpu().numpy()
+    return image
  
 class BaseUdpRunner(BaseRunner):
     def __init__(self,
@@ -59,10 +70,10 @@ class BaseUdpRunner(BaseRunner):
         # UDP comms - same helper classes used in main.py
         self.listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
         self.follower_sender = TeleopUDPHandler(
-            remote_ip, follower_send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
+            remote_ip, follower_send_port, action_size=7, DOF=self.DOF, horizon=self.n_action_steps
         )
         self.leader_sender = TeleopUDPHandler(
-            remote_ip, leader_send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
+            remote_ip, leader_send_port, action_size=7, DOF=self.DOF, horizon=self.n_action_steps
         )
 
         camera_configs = {
@@ -130,6 +141,9 @@ class BaseUdpRunner(BaseRunner):
                     elif number == 14:  # 'x' button
                         print("press x")
                         self._handle_stop_and_save()
+                    elif number == 6:  # 'down' button
+                        print("press down")
+                        self._handle_stop()
 
         except BlockingIOError:
             pass
@@ -168,6 +182,14 @@ class BaseUdpRunner(BaseRunner):
             self.loop_state = "IDLE"
 
             cprint(f"\n[RUNNER] \U0001F4BE Saved {ep_name}. Ready for next episode.", "green")
+            cprint("Press [R] or 'o' to start recording", "cyan")
+
+    def _handle_stop(self):
+        """'down' on joystick: stop recording, stop any action sending."""
+        if self.loop_state == "INFER":
+            self.loop_state = "IDLE"
+
+            cprint(f"\n[RUNNER] \U0001F4BE Done inference", "green")
             cprint("Press [R] or 'o' to start recording", "cyan")
     
     def _read_images(self):
@@ -243,7 +265,8 @@ class BaseUdpRunner(BaseRunner):
                     )
 
                     if len(new_states) > 0 and obs_dict is not None:
-                        time_to_chunk_end_s = new_states[-1]["time_to_chunk_end_ns"] / 1e9
+                        time_to_chunk_end_ns = new_states[-1]["time_to_chunk_end_ns"] 
+                        time_to_chunk_end_s = time_to_chunk_end_ns / 1e9
                         interval_elapsed = (time.time() - self.last_send_time) >= self.send_interval
 
                         should_infer = (time_to_chunk_end_s <= self.inference_time) and interval_elapsed

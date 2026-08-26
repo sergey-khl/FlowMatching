@@ -423,36 +423,6 @@ class TrainFlowMatchingWorkspace(BaseWorkspace):
             self.epoch += 1
             del step_log
 
-    def eval(self):
-        # load the latest checkpoint
-        
-        cfg = copy.deepcopy(self.cfg)
-        
-        ckpt_path = self.get_checkpoint_path(tag=cfg.checkpoint.tag)
-        if ckpt_path.is_file():
-            cprint(f"EVAL on checkpoint {ckpt_path}", 'magenta')
-            self.load_checkpoint(path=ckpt_path)
-        
-        # configure env
-        env_runner: BaseRunner
-        env_runner = hydra.utils.instantiate(
-            cfg.task.env_runner,
-            output_dir=self.output_dir)
-        assert isinstance(env_runner, BaseRunner)
-        policy = self.model
-        if cfg.training.use_ema:
-            policy = self.ema_model
-        policy.eval()
-        policy.cuda()
-
-        runner_log = env_runner.run(policy)
-        
-      
-        cprint(f"---------------- Eval Results --------------", 'magenta')
-        for key, value in runner_log.items():
-            if isinstance(value, float):
-                cprint(f"{key}: {value:.4f}", 'magenta')
-        
 @hydra.main(
     version_base=None,
     config_path=str(pathlib.Path(__file__).resolve().parent.parent.joinpath("config")),

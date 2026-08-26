@@ -1,6 +1,6 @@
 from termcolor import cprint
 import time
-from wam_haptic_dmps.flir_shared_stream import FLIRProcessStream
+from diffusion_policy_3d.common.flir_shared_stream import FLIRProcessStream
 
 
 class MultiFLIRManager:

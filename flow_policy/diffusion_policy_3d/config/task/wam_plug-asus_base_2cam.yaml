@@ -47,7 +47,7 @@ shape_meta: &shape_meta
         down_sample_steps: 50
 
 env_runner:
-  _target_: diffusion_policy_3d.env_runner.udp_runner.UdpRunner
+  _target_: diffusion_policy_3d.env_runner.base_udp_runner.BaseUdpRunner
   remote_ip: "127.0.0.1"
   follower_send_port: 20000
   leader_send_port: 10000
