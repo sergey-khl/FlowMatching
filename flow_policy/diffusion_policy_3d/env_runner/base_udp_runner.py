@@ -181,18 +181,24 @@ class BaseUdpRunner(BaseRunner):
         """'r' on keyboard / 'o' on joystick: begin recording a new episode."""
         if self.loop_state == "IDLE":
             self.recorder.clear()
-            self.loop_state = "INFER"
+            self._flush_queues()
             self.last_send_time = 0.0
+            self.loop_state = "INFER"
+
             cprint("\n[RUNNER] \U0001F534 EPISODE STARTED", "red", attrs=["bold"])
 
     def _handle_stop_and_save(self):
         """'d' on keyboard / 'x' on joystick: stop recording, save episode, stop any action sending."""
         if self.loop_state == "INFER":
+            self.loop_state = "IDLE"
+
             ep_name = f"episode_{self.episode_counter}"
             self.recorder.save_episode(ep_name)
             self.episode_counter += 1
 
-            self.loop_state = "IDLE"
+            self._flush_queues()
+            self.recorder.clear()
+            self.last_send_time = 0.0
 
             cprint(f"\n[RUNNER] \U0001F4BE Saved {ep_name}. Ready for next episode.", "green")
             cprint("Press [R] or 'o' to start recording", "cyan")
@@ -202,8 +208,19 @@ class BaseUdpRunner(BaseRunner):
         if self.loop_state == "INFER":
             self.loop_state = "IDLE"
 
+            self.recorder.clear()
+            self.last_send_time = 0.0
+
             cprint(f"\n[RUNNER] \U0001F4BE Done inference", "green")
             cprint("Press [R] or 'o' to start recording", "cyan")
+
+    def _flush_queues(self):
+        for q in (self._infer_request_q, self._infer_result_q):
+            while True:
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    break
     
     def _read_images(self):
         status, raw_frames = self.camera_manager.read_all()
