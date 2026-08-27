@@ -52,14 +52,15 @@ class RecorderReceiver:
         while not self._stop.is_set():
             try:
                 data, _ = self.sock_recv.recvfrom(1024)
+                recv_ts_ns = time.time_ns()   # capture immediately on arrival
             except OSError:
                 break
             if len(data) == self.packet_size:
                 try:
-                    self.q.put_nowait(data)
+                    self.q.put_nowait((data, recv_ts_ns))
                 except queue.Full:
                     self.q.get_nowait()
-                    self.q.put_nowait(data)
+                    self.q.put_nowait((data, recv_ts_ns))
             else:
                 print(f"⚠️ Dropping packet! Expected {self.packet_size} bytes, got {len(data)} bytes.")
                     
@@ -68,13 +69,13 @@ class RecorderReceiver:
         packets = []
         while True:
             try:
-                data = self.q.get_nowait()
+                data, recv_ts_ns = self.q.get_nowait()
             except queue.Empty:
                 break
-            packets.append(self._unpack(data))
+            packets.append(self._unpack(data, recv_ts_ns))
         return packets
 
-    def _unpack(self, data):
+    def _unpack(self, data, recv_ts_ns):
         # If we didn't get any valid data this loop, return None
         if data is None:
             return None
@@ -128,7 +129,7 @@ class RecorderReceiver:
             "gripper_vel": unpacked[idx_gripper_vel],
             "gripper_torque": unpacked[idx_gripper_torque],
             "time_to_chunk_end_ns": unpacked[idx_time_to_chunk_end],
-            "timestamp_ns": time.time_ns(), # C++ clock is not compatible with the way we should be using timestamps
+            "timestamp_ns": recv_ts_ns, # C++ clock is not compatible with the way we should be using timestamps
         }
 
     def close(self):

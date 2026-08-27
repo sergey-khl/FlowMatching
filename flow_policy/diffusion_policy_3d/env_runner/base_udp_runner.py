@@ -10,6 +10,8 @@ from termcolor import cprint
 from pynput import keyboard
 from scipy.spatial.transform import Rotation as R
 import cv2
+import threading
+import queue
 
 from diffusion_policy_3d.policy.base_policy import BasePolicy
 from diffusion_policy_3d.common.pytorch_util import dict_apply
@@ -47,7 +49,7 @@ class BaseUdpRunner(BaseRunner):
                 shape_meta: dict,
                 n_action_steps: int,
                 dof: int = 7,
-                loop_hz: int = 10,
+                loop_hz: int = 500,
                 debug: bool = False,
                 ):
         super().__init__(output_dir)
@@ -67,14 +69,20 @@ class BaseUdpRunner(BaseRunner):
 
         self.inference_time = 0.1          # estimate of how long inf takes
         self.inference_time_alpha = 0.2    # EMA smoothing factor for the estimate
+
+        self._infer_request_q = queue.Queue(maxsize=1)   # pending obs
+        self._infer_result_q = queue.Queue(maxsize=1)    # pending action
+        self._inference_busy = threading.Event()          # set while worker is actually running predict_action
+        self._stop_event = threading.Event()
+        self._infer_thread = None
  
         # UDP comms - same helper classes used in main.py
         self.listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
         self.follower_sender = TeleopUDPHandler(
-            remote_ip, follower_send_port, action_size=7, DOF=self.DOF, horizon=self.n_action_steps
+            remote_ip, follower_send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
         )
         self.leader_sender = TeleopUDPHandler(
-            remote_ip, leader_send_port, action_size=7, DOF=self.DOF, horizon=self.n_action_steps
+            remote_ip, leader_send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
         )
 
         camera_configs = {
@@ -222,6 +230,9 @@ class BaseUdpRunner(BaseRunner):
             except Exception:
                 pass
         self.camera_manager.stop_all()
+        self._stop_event.set()
+        if self._infer_thread is not None:
+            self._infer_thread.join(timeout=1.0)
 
         os._exit(0)
 
@@ -230,6 +241,34 @@ class BaseUdpRunner(BaseRunner):
             proc = preprocess_image(img_bgr)
             proc = cv2.cvtColor(proc, cv2.COLOR_BGR2RGB)
             self.recorder.add_image_step(name, proc, ts_ns)
+
+    def _inference_worker(self, policy):
+        while not self._stop_event.is_set():
+            try:
+                obs_dict, time_to_chunk_end_ns, t_infer_start = self._infer_request_q.get(timeout=0.1)
+            except queue.Empty:
+                continue
+
+            self._inference_busy.set()
+            with torch.no_grad():
+                action_dict = policy.predict_action(obs_dict, self.past_actions)
+            np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
+            action_chunk = np_action_dict['action'].squeeze(0)
+
+            elapsed = time.monotonic() - t_infer_start
+            self.inference_time = (
+                self.inference_time_alpha * elapsed
+                + (1 - self.inference_time_alpha) * self.inference_time
+            )
+
+            # drop any stale unread result before pushing the new one
+            if self._infer_result_q.full():
+                try:
+                    self._infer_result_q.get_nowait()
+                except queue.Empty:
+                    pass
+            self._infer_result_q.put((action_chunk, time_to_chunk_end_ns))
+            self._inference_busy.clear()
 
     def run(self, policy: BasePolicy):
         try:
@@ -246,6 +285,9 @@ class BaseUdpRunner(BaseRunner):
             policy = policy
             device = policy.device
             dtype = policy.dtype
+
+            self._infer_thread = threading.Thread(target=self._inference_worker, args=(policy,), daemon=True)
+            self._infer_thread.start()
 
             t_start = time.monotonic()
             iter_idx = 0
@@ -265,11 +307,7 @@ class BaseUdpRunner(BaseRunner):
                     if new_frames:
                         self._handle_new_frames(new_frames)
 
-                    obs_dict = self.recorder.get_obs_dict(
-                        self.obs_key_horizons, device=device, dtype=dtype
-                    )
-
-                    if len(new_states) > 0 and obs_dict is not None:
+                    if len(new_states) > 0:
                         time_to_chunk_end_ns = new_states[-1]["time_to_chunk_end_ns"] 
                         time_to_chunk_end_s = time_to_chunk_end_ns / 1e9
                         interval_elapsed = (time.time() - self.last_send_time) >= self.send_interval
@@ -278,38 +316,29 @@ class BaseUdpRunner(BaseRunner):
                     else:
                         should_infer = False
 
-                    if should_infer:
-                        t_infer_start = time.monotonic()
+                    if should_infer and not self._inference_busy.is_set() and self._infer_request_q.empty():
+                        obs_dict = self.recorder.get_obs_dict(
+                            self.obs_key_horizons, device=device, dtype=dtype
+                        )
+                        if obs_dict is not None:
+                            self._infer_request_q.put((obs_dict, time_to_chunk_end_ns, time.monotonic()))
+                            self.last_send_time = time.time()
 
-
-                        with torch.no_grad():
-                            action_dict = policy.predict_action(obs_dict, self.past_actions)
-
-                        # device_transfer
-                        np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
-
-                        action_chunk = np_action_dict['action'].squeeze(0)
-                        # action_chunk = np_action_dict['action_pred'].squeeze(0)
-
-                        print("---------------------wrench")
+                    try:
+                        action_chunk, time_to_skip_ns = self._infer_result_q.get_nowait()
+                        print("---------------------action")
 
                         for action in action_chunk:
                             print(list(action))
                         print("---------------------\n\n")
 
-                        elapsed = time.monotonic() - t_infer_start
-                        self.inference_time = (
-                            self.inference_time_alpha * elapsed
-                            + (1 - self.inference_time_alpha) * self.inference_time
-                        )
                         print(f"took {self.inference_time}")
                         print(f"skipping {time_to_chunk_end_s}")
-
                         time_to_skip_ns = time_to_chunk_end_ns
                         self.follower_sender.send_action_chunk(action_chunk, time_to_skip_ns)
                         self.leader_sender.send_action_chunk(action_chunk, time_to_skip_ns)
-
-                        self.last_send_time = time.time() # safety so we dont double infer on a similar state 
+                    except queue.Empty:
+                        pass
 
                 precise_wait(t_cycle_end)
                 iter_idx += 1

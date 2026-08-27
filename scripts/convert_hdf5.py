@@ -164,8 +164,8 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/plug_asus_81/"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_plug-asus-81_nocorr-{IMPORTANCE_POWER}.zarr"
+    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_apple_61/"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-61_nocorr-{IMPORTANCE_POWER}.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -225,6 +225,8 @@ if __name__ == "__main__":
     for i, (base_path, demo_dir) in enumerate(dirs):
         dir_name = os.path.dirname(demo_dir)
 
+        if i % 2 == 0:
+            continue
         
         data = h5py.File(os.path.join(base_path, demo_dir), "r")
         low_dim = data["low_dim"]
@@ -306,7 +308,7 @@ if __name__ == "__main__":
                 rotmats_ds[j],
                 # policy_cmd_ds[j],
                 # ext_torque_ds[j],
-                # [gripper_pos_ds[j]],
+                [gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
@@ -315,7 +317,7 @@ if __name__ == "__main__":
                 # delta_pos,
                 jp_ds[j + 1],
                 # human_torque_ds[j + 1],
-                # [gripper_action],
+                [gripper_action],
             ]).astype(np.float32)  # (7,)
  
             if has_weights:

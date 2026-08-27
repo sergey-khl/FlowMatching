@@ -129,11 +129,13 @@ class Recorder:
         leader_jp = np.asarray(self.low_dim_data["leader_jp"])            # (N,7)
         leader_cart_pos = np.asarray(self.low_dim_data["leader_cart_pos"])  # (N,3)
         leader_quat = np.asarray(self.low_dim_data["leader_quat_wxyz"])     # (N,4)
+        gripper_pos = np.asarray(self.low_dim_data["gripper_pos"])
         rows = [
             np.concatenate([
                 leader_jp[i],
                 leader_cart_pos[i],
                 self._quat_to_rotmat(leader_quat[i]),
+                [gripper_pos[i]],
             ]).astype(np.float32)
             for i in raw_ids
         ]
@@ -204,7 +206,7 @@ class Recorder:
                     obs_result[key] = self._gather_images(front, raw_ids)
                 elif key == "wrist_img":
                     raw_ids = wrist_ds_idx[ds_ids]
-                    # obs_result[key] = self._gather_images(wrist, raw_ids)
+                    obs_result[key] = self._gather_images(wrist, raw_ids)
                 else:
                     raise ValueError(f"get_obs_dict: unrecognized image obs key '{key}'")
 
