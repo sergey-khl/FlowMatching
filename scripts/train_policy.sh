@@ -3,13 +3,14 @@
 # bash scripts/train_policy.sh train_flow_matching rtc_flow_match_rgb wam_plug-asus_base_1cam 0001 0 0
 # bash scripts/train_policy.sh train_flow_matching rtc_flow_match_rgb wam_pandp-apple_base_2cam 0001 0 0
 # bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_pandp-apple_cr-dagger_2cam 0001 0 0
+# bash scripts/train_policy.sh train_dg_dagger dg_dagger_rgb wam_pandp-apple_dg-dagger_2cam 0001 0 0
 
 # BEFORE RUNNING:
 # DONE: collect data at 500 hz or at least 128. base willl run at 1hz and res at 50
 # DONE: collect img timestamps. these are used as the base index for the sampler
 # DONE: torque is ema at 500 windows with removed offset
 # DONE: https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/diffusion_policy/workspace/train_residual_mlp_workspace.py#L51 << to load base policy checkpoint
-# rc jp actoins should be diffs to match
+# DONE: rc jp actoins should be diffs to match
 #
 #
 # NOTES:

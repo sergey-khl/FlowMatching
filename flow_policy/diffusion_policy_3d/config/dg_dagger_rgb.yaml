@@ -10,9 +10,9 @@ exp_name: "debug"
 
 output_dir: /mnt/10tb/serg/FlowMatching/outputs/${name}_${task_name}
 
-horizon: 10
+horizon: 64
 n_obs_steps: 1
-n_action_steps: 5
+n_action_steps: 64
 n_latency_steps: 0
 dataset_obs_steps: ${n_obs_steps}
 keypoint_visible_rate: 1.0
@@ -27,7 +27,7 @@ policy:
   use_up_condition: true
   weighted_loss: false
   batched_weights: false
-  correction_thresh: 1.0
+  correction_thresh: 0.6 # repeated from task config.
   scale_loss_weight: 1.0
 
   mlp_cfg:
@@ -126,7 +126,7 @@ policy:
     
     force_encoder_cfg:
       model_name: causalconv
-      feature_dim: 448
+      feature_dim: 768
       frozen: False
       pretrained: False
       use_group_norm: False

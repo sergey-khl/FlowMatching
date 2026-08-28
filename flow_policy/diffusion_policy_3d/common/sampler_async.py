@@ -214,9 +214,7 @@ class SequenceSamplerAsync:
 
     @staticmethod
     def _slice_backward(arr, center_idx, ep_start, horizon, down_sample_steps):
-        """`horizon` frames ending at (and including) center_idx, strided by
-        down_sample_steps, going backwards. Pads by repeating the earliest
-        in-window frame if the episode doesn't have enough history."""
+        """`horizon` frames ending at (and including) center_idx, strided by down_sample_steps, going backwards."""
         offsets = np.arange(-(horizon - 1) * down_sample_steps, 1, down_sample_steps)
         raw_ids = center_idx + offsets
         clipped_ids = np.clip(raw_ids, ep_start, center_idx)
@@ -224,10 +222,7 @@ class SequenceSamplerAsync:
 
     @staticmethod
     def _slice_forward(arr, start_idx, ep_end, horizon, down_sample_steps, padding):
-        """`horizon` frames starting at start_idx, strided by down_sample_steps,
-        going forwards. Pads by repeating the last in-episode frame if
-        padding=True; otherwise the caller must have already guaranteed
-        there's enough room (see valid_end computation in __init__)."""
+        """`horizon` frames starting at start_idx, strided by down_sample_steps, going forwards."""
         offsets = np.arange(0, horizon * down_sample_steps, down_sample_steps)
         raw_ids = start_idx + offsets
         if padding:
