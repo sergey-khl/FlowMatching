@@ -31,6 +31,7 @@ class LabRealAsyncDataset(BaseDataset):
         max_train_episodes=None,
         task_name=None,
         has_pointclouds=False,
+        has_policy=False,
         num_points=4096,
     ):
         super().__init__()
@@ -38,6 +39,7 @@ class LabRealAsyncDataset(BaseDataset):
         self.task_name = task_name
 
         self.has_pointclouds = has_pointclouds
+        self.has_policy = has_policy
         self.num_points = num_points
 
         sample_cfg = shape_meta["sample"]
@@ -76,7 +78,7 @@ class LabRealAsyncDataset(BaseDataset):
         img_keys = {img_time_key}
         for key, cfg in self.obs_key_horizons.items():
             source = cfg.get("source", "low_dim")
-            if source == "low_dim":
+            if source == "low_dim" or source == "weight":
                 low_dim_keys.add(key)
             elif source == "img":
                 img_keys.add(key)
@@ -151,10 +153,14 @@ class LabRealAsyncDataset(BaseDataset):
  
         if self.has_pointclouds:
             normalizer["point_cloud"] = SingleFieldLinearNormalizer.create_identity()
+
+        if self.has_policy:
+            normalizer["policy_cmd"] = SingleFieldLinearNormalizer.create_identity()
  
         normalizer["weights"] = SingleFieldLinearNormalizer.create_identity()
  
         normalizer["ext_torque"] = SingleFieldLinearNormalizer.create_identity()
+
  
         return normalizer
 
@@ -171,7 +177,7 @@ class LabRealAsyncDataset(BaseDataset):
                 arr = np.transpose(arr, (0, 3, 1, 2))  # (T,H,W,C) -> (T,C,H,W)
             if cfg.get("source") == "point_cloud":
                 arr = point_process.uniform_sampling_numpy(arr, self.num_points)
-            if cfg.get("source") == "traj_weight":
+            if cfg.get("source") == "weight":
                 data["weights"] = arr
                 continue
             data["obs"][out_key] = arr

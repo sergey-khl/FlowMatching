@@ -251,7 +251,8 @@ class SequenceSamplerAsync:
             down_sample_steps = cfg.get("down_sample_steps", 1)
             source = cfg.get("source", "low_dim")
  
-            if source == "low_dim":
+            # weight here doesent actually get added to obs.
+            if source == "low_dim" or source == "weight":
                 arr = self.low_dim_replay_buffer[key]
                 obs_result[key] = self._slice_backward(
                     arr, low_dim_query_idx, low_dim_ep_start, horizon, down_sample_steps

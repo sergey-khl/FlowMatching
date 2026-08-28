@@ -108,11 +108,6 @@ def delta_quats(q1, q2):
         w1*z2 - x1*y2 + y1*x2 - z1*w2,
     ])
 
-def delta_jp(jp_current, jp_next):
-    """just sub the jp's"""
-    jp_delta = jp_next - jp_current
-    return jp_delta
-
 def is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
     """
     port from      https://github.com/openvla/openvla/blob/main/experiments/robot/libero/regenerate_libero_dataset.py   """
@@ -164,8 +159,8 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_apple_61/"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-61_nocorr-{IMPORTANCE_POWER}.zarr"
+    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp-apple-corr-60/"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-60_corr-{IMPORTANCE_POWER}.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -225,17 +220,9 @@ if __name__ == "__main__":
     for i, (base_path, demo_dir) in enumerate(dirs):
         dir_name = os.path.dirname(demo_dir)
 
-        if i % 2 == 0:
-            continue
-        
         data = h5py.File(os.path.join(base_path, demo_dir), "r")
         low_dim = data["low_dim"]
         images = data["images"]
-
-        if has_images and ("front_image" not in images or "wrist_image" not in images):
-            cprint(f"[{demo_dir}] Missing front_image/wrist_image, skipping episode", "yellow")
-            data.close()
-            continue
 
         cprint("Processing {}".format(demo_dir), "green")
 
@@ -246,7 +233,7 @@ if __name__ == "__main__":
         gripper_pos = low_dim["gripper_pos"][:]           # (N,)
         policy_torque_scale = low_dim["policy_torque_scale"][:] # (N, 7)
         policy_cmd = low_dim["policy_jp"][:] # (N, 7)
-        human_torque = low_dim["human_torque"][:]        # (N, 4) w,x,y,z
+        human_torque = low_dim["filtered_human_torque"][:]        # (N, 4) w,x,y,z
 
         idxs = downsample_by_timestamp(timestamps_ns, TARGET_DT_NS)
 
@@ -295,7 +282,7 @@ if __name__ == "__main__":
             # delta_rot = delta_rotvec(cart_rot_ds[j], cart_rot_ds[j + 1])
             # delta_rot = delta_euler(euler_ds[j], euler_ds[j + 1])
             # delta_rot = delta_quats(quats_ds[j], quats_ds[j + 1])
-            # delta_rot = delta_jp(jp_ds[j], jp_ds[j + 1])
+            delta_jp = jp_ds[j + 1] - jp_ds[j]
             gripper_action = gripper_action_ds[j + 1]
  
             # if is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
@@ -306,18 +293,14 @@ if __name__ == "__main__":
                 jp_ds[j],
                 cart_pos_ds[j],
                 rotmats_ds[j],
-                # policy_cmd_ds[j],
-                # ext_torque_ds[j],
                 [gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
-                # cart_pos_ds[j + 1],
-                # quats_ds[j + 1],
-                # delta_pos,
-                jp_ds[j + 1],
-                # human_torque_ds[j + 1],
+                # jp_ds[j + 1],
+                delta_jp,
                 [gripper_action],
+                human_torque[j + 1]
             ]).astype(np.float32)  # (7,)
  
             if has_weights:
@@ -375,11 +358,15 @@ if __name__ == "__main__":
         total_count += episode_len
 
         if has_images:
-            front_image = images["front_image"]["images"]  # (M, H, W, 3)
-            wrist_image = images["wrist_image"]["images"]   # (K, H, W, 3)
+            # front_image = images["front_image"]["images"]  # (M, H, W, 3)
+            # wrist_image = images["wrist_image"]["images"]   # (K, H, W, 3)
+            front_image = images["front_img"]["images"]  # (M, H, W, 3)
+            wrist_image = images["wrist_img"]["images"]   # (K, H, W, 3)
 
-            front_timestamps_ns = images["front_image"]["front_img_timestamp_ns"][:]
-            wrist_timestamps_ns = images["wrist_image"]["wrist_img_timestamp_ns"][:]
+            # front_timestamps_ns = images["front_image"]["front_img_timestamp_ns"][:]
+            # wrist_timestamps_ns = images["wrist_image"]["wrist_img_timestamp_ns"][:]
+            front_timestamps_ns = images["front_img"]["front_img_timestamp_ns"][:]
+            wrist_timestamps_ns = images["wrist_img"]["wrist_img_timestamp_ns"][:]
 
             # downsample using front camera as the anchor
             img_idxs = downsample_by_timestamp(front_timestamps_ns, IMG_TARGET_DT_NS)

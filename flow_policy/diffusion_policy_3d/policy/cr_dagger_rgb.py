@@ -12,10 +12,6 @@ from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusion_policy_3d.common.model_util import print_params
 from diffusion_policy_3d.common.pytorch_util import dict_apply
 from diffusion_policy_3d.model.common.normalizer import LinearNormalizer
-from diffusion_policy_3d.model.diffusion.mask_generator import \
-    LowdimMaskGenerator
-from diffusion_policy_3d.model.diffusion.simple_conditional_unet1d import \
-    ConditionalUnet1D
 from diffusion_policy_3d.model.vision.timm_obs_encoder_with_force import TimmObsEncoderWithForce
 from diffusion_policy_3d.model.compliant_residual.mlp import MLP
 from diffusion_policy_3d.policy.base_policy import BasePolicy
@@ -31,7 +27,6 @@ class CrDaggerRGB(BasePolicy):
         n_action_steps,
         n_obs_steps,
         mlp_cfg,
-        num_inference_steps=10,
         obs_as_global_cond=True,
         condition_type="film",
         use_depth=False,
@@ -97,78 +92,19 @@ class CrDaggerRGB(BasePolicy):
         )
         self.obs_encoder = obs_encoder
 
-        self.mask_generator = LowdimMaskGenerator(
-            action_dim=action_dim,
-            obs_dim=0 if obs_as_global_cond else obs_feature_dim,
-            max_n_obs_steps=n_obs_steps,
-            fix_obs_steps=True,
-            action_visible=False,
-        )
-
         self.normalizer = LinearNormalizer()
         self.horizon = horizon
         self.obs_feature_dim = obs_feature_dim
         self.action_dim = action_dim
         self.n_action_steps = n_action_steps
-        self.obs_as_global_cond = obs_as_global_cond
         self.kwargs = kwargs
         self.weighted_loss = weighted_loss
         self.batched_weights = batched_weights
 
-        self.num_inference_steps = num_inference_steps
-
         print_params(self)
 
-    # ========= inference  ============
-    def conditional_sample(
-        self,
-        action_prefix,
-        condition_data,
-        condition_mask,
-        condition_data_pc=None,
-        condition_mask_pc=None,
-        local_cond=None,
-        global_cond=None,
-        generator=None,
-        delay=0,
-        # keyword arguments to scheduler.step
-        **kwargs,
-    ):
-        # Start from random noise.
-        trajectory = torch.normal(
-            0,
-            1,
-            size=condition_data.shape,
-            dtype=condition_data.dtype,
-            device=condition_data.device,
-        )
-        prefix_mask = torch.arange(self.horizon)[None, :] < delay  # (1, horizon)
-        prefix_mask = prefix_mask.to(trajectory.device)
-        
-        B = condition_data.shape[0]
-
-        delta = 1.0 / self.num_inference_steps
-        for t in torch.arange(0, 1, delta):
-            trajectory = torch.where(
-                prefix_mask.unsqueeze(-1), action_prefix, trajectory
-            )
-
-            step = self.residual(global_cond)[..., : self.action_dim]
-
-            step = step[..., : self.action_dim]  # only keep action dim
-
-            # Euler integration step
-            trajectory = trajectory - delta * step
-        
-        # finally, enforce prefix
-        trajectory = torch.where(
-            prefix_mask.unsqueeze(-1), action_prefix, trajectory
-        )
-
-        return trajectory
-
     def predict_action(
-        self, obs_dict: Dict[str, torch.Tensor], past_actions: torch.Tensor = None
+        self, obs_dict: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         """
         obs_dict: must include "obs" key
@@ -193,64 +129,15 @@ class CrDaggerRGB(BasePolicy):
         B, To = value.shape[:2]
         T = self.horizon
         Da = self.action_dim
-        Do = self.obs_feature_dim
 
         # build input
         device = self.device
         dtype = self.dtype
 
-        # handle different ways of passing observation
-        local_cond = None
-        global_cond = None
-        if self.obs_as_global_cond:
-            nobs_features = self.obs_encoder(nobs)["result"]
-            if "cross_attention" in self.condition_type: # does nothign
-                # treat as a sequence
-                global_cond = nobs_features.reshape(B, self.n_obs_steps, -1)
-            else:
-                # reshape back to B, Do
-                global_cond = nobs_features.reshape(B, -1)
-            # empty data for action
-            cond_data = torch.zeros(size=(B, T, Da), device=device, dtype=dtype)
-            cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-        else:
-            # condition through impainting
-            this_nobs = dict_apply(
-                nobs, lambda x: x[:, :To, ...]
-            )
-            nobs_features = self.obs_encoder(this_nobs)
-            # reshape back to B, T, Do
-            nobs_features = nobs_features.reshape(B, To, -1)
-            cond_data = torch.zeros(size=(B, T, Da + Do), device=device, dtype=dtype)
-            cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-            cond_data[:, :To, Da:] = nobs_features
-            cond_mask[:, :To, Da:] = True
+        nobs_features = self.obs_encoder(nobs)["result"]
+        global_cond = nobs_features.reshape(B, -1)
 
-        # TODO: pad the action prefix to the correct size.
-        action_prefix = torch.zeros(
-            (B, self.horizon, self.action_dim),
-            device=device,
-            dtype=dtype
-        )
-        
-        if past_actions is not None and past_actions.shape[1] > 0:
-            # Insert valid history into the start of the buffer
-            past_actions_normalized = self.normalizer["action"].normalize(past_actions)
-            current_delay = past_actions.shape[1]
-            action_prefix[:, :past_actions.shape[1], :] = past_actions_normalized[:, :past_actions.shape[1], :]
-        else:
-            current_delay = 0
-
-        # run sampling via euler integration
-        nsample = self.conditional_sample(
-            action_prefix=action_prefix,
-            condition_data=cond_data,
-            condition_mask=cond_mask,
-            local_cond=local_cond,
-            global_cond=global_cond,
-            delay=current_delay,
-            **self.kwargs,
-        )
+        nsample = self.residual(global_cond)
 
         # unnormalize prediction
         naction_pred = nsample[..., :Da]
@@ -291,49 +178,24 @@ class CrDaggerRGB(BasePolicy):
                 nobs[key] = nobs['depth'].unsqueeze(-3)
 
         batch_size = nactions.shape[0]
-        horizon = nactions.shape[1]
 
         # handle different ways of passing observation
-        local_cond = None
         global_cond = None
         trajectory = nactions
-        cond_data = trajectory
 
-        if self.obs_as_global_cond:
-            nobs_features = self.obs_encoder(nobs)["result"]
-
-            if "cross_attention" in self.condition_type: # does nothgin
-                # treat as a sequence
-                global_cond = nobs_features.reshape(batch_size, self.n_obs_steps, -1)
-            else:
-                # reshape back to B, Do
-                global_cond = nobs_features.reshape(batch_size, -1)
-        else: # does nothign
-            # reshape B, T, ... to B*T
-            this_nobs = dict_apply(nobs, lambda x: x)
-            nobs_features = self.obs_encoder(this_nobs)
-            # reshape back to B, T, Do
-            nobs_features = nobs_features.reshape(batch_size, horizon, -1)
-            cond_data = torch.cat([nactions, nobs_features], dim=-1)
-            trajectory = cond_data.detach()
-
-        # this is just 0's
-        condition_mask = self.mask_generator(trajectory.shape)
-
-        # compute loss mask
-        loss_mask = ~condition_mask
+        nobs_features = self.obs_encoder(nobs)["result"]
+        global_cond = nobs_features.reshape(batch_size, -1)
 
         target = trajectory
 
         weights = batch["weights"]  # (B, T)
-
 
         pred = self.residual(global_cond)  # (B,1) or (B,T)
         if pred.shape != target.shape:
             pred = pred.expand_as(target)
         loss = F.mse_loss(pred, target)
 
-        loss = loss * loss_mask.type(loss.dtype)
+        loss = loss
         
         if self.weighted_loss:
             weights = batch["weights"].unsqueeze(-1)
@@ -341,8 +203,7 @@ class CrDaggerRGB(BasePolicy):
         
         # loss = reduce(loss, "b ... -> b (...)", "mean")
         # loss = loss.mean()
-        valid_elements_count = loss_mask.sum().clamp_min(1.0)
-        loss = loss.sum() / valid_elements_count
+        loss = loss.sum()
 
         loss_dict = {
             "bc_loss": loss.item(),

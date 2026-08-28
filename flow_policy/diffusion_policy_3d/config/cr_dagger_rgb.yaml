@@ -10,7 +10,7 @@ exp_name: "debug"
 
 output_dir: /mnt/10tb/serg/FlowMatching/outputs/${name}_${task_name}
 
-horizon: 10
+horizon: 5
 n_obs_steps: 1
 n_action_steps: 5
 n_latency_steps: 0
@@ -35,7 +35,6 @@ policy:
   n_action_steps: ${n_action_steps}
   n_obs_steps: ${n_obs_steps}
 
-  obs_as_global_cond: true
   shape_meta: ${shape_meta}
 
   use_depth: False
@@ -46,7 +45,7 @@ policy:
     fuse_mode: modality-attention
     reduce_pretrained_lr: True
 
-    base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_plug-asus_base_2cam/checkpoints/wam_plug-asus_base_2cam-epoch=0500-test_mean_score=-0.003.ckpt 
+    base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_pandp-apple_base_2cam/checkpoints/wam_pandp-apple_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
 
     ##### from scratch #####
     # model_name: 'vit_base_patch16_224'
@@ -109,7 +108,7 @@ policy:
     
     force_encoder_cfg:
       model_name: causalconv
-      feature_dim: 448
+      feature_dim: 768
       frozen: False
       pretrained: False
       use_group_norm: False

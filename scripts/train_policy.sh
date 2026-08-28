@@ -2,7 +2,7 @@
 # bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_plug-asus_base_2cam 0001 0 0
 # bash scripts/train_policy.sh train_flow_matching rtc_flow_match_rgb wam_plug-asus_base_1cam 0001 0 0
 # bash scripts/train_policy.sh train_flow_matching rtc_flow_match_rgb wam_pandp-apple_base_2cam 0001 0 0
-# bash scripts/train_policy.sh train_flow_matching rtc_force_flow_match_rgb wam_plug-asus_base-force_2cam 0001 0 0
+# bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_pandp-apple_cr-dagger_2cam 0001 0 0
 
 # BEFORE RUNNING:
 # DONE: collect data at 500 hz or at least 128. base willl run at 1hz and res at 50
