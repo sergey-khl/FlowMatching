@@ -191,7 +191,7 @@ class Recorder:
             source = cfg.get("source", "low_dim")
             span = (horizon - 1) * down_sample_steps
 
-            if source == "low_dim":
+            if source == "low_dim" or source == "policy_cmd":
                 if low_dim_center < span:
                     return None
                 ds_ids = np.arange(low_dim_center - span, low_dim_center + 1, down_sample_steps)

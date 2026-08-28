@@ -22,7 +22,7 @@ shape_meta: &shape_meta
     shape: [7]
   sample:
     # (ms) time held free at the end of each episode so every sparse query still has room for its full action horizon.
-    training_duration_per_sparse_query: 5000
+    training_duration_per_sparse_query: 6000
     obs:
       sparse:
         # down_sample_steps: how many raw steps to skip in that key's own channel
@@ -59,6 +59,7 @@ env_runner:
   debug: False
   shape_meta: *shape_meta
   n_action_steps: ${n_action_steps}
+  action_size: 7
 
 # down_sample_steps: how many steps to skip in the raw data for the given usage
 # horizon: how many steps to look ahead(action) or back(obs) after downsample for the given usage

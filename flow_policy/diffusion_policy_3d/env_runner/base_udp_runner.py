@@ -39,7 +39,7 @@ def preprocess_image(image):
  
 class BaseUdpRunner(BaseRunner):
     def __init__(self,
-                 output_dir: str,
+                output_dir: str,
                 remote_ip: str,
                 follower_send_port: int,
                 leader_send_port: int,
@@ -48,6 +48,7 @@ class BaseUdpRunner(BaseRunner):
                 front_cam_serial: str,
                 shape_meta: dict,
                 n_action_steps: int,
+                action_size: int,
                 dof: int = 7,
                 loop_hz: int = 500,
                 debug: bool = False,
@@ -79,15 +80,15 @@ class BaseUdpRunner(BaseRunner):
         # UDP comms - same helper classes used in main.py
         self.listener = RecorderReceiver(remote_ip, recv_port, dof=self.DOF)
         self.follower_sender = TeleopUDPHandler(
-            remote_ip, follower_send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
+            remote_ip, follower_send_port, action_size=action_size, horizon=self.n_action_steps
         )
         self.leader_sender = TeleopUDPHandler(
-            remote_ip, leader_send_port, action_size=8, DOF=self.DOF, horizon=self.n_action_steps
+            remote_ip, leader_send_port, action_size=action_size, horizon=self.n_action_steps
         )
 
         camera_configs = {
-            "wrist_img": {"serial": "18475182", "exposure_time": 12000, "gain": 8, "fps": 45},
-            "front_img": {"serial": "18475176", "exposure_time": 7000, "gain": 8, "fps": 45},
+            "wrist_img": {"serial": wrist_cam_serial, "exposure_time": 12000, "gain": 8, "fps": 45},
+            "front_img": {"serial": front_cam_serial, "exposure_time": 7000, "gain": 8, "fps": 45},
         }
 
         self.camera_manager = MultiFLIRManager(camera_configs)

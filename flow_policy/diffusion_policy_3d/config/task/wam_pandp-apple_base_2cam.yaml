@@ -59,6 +59,7 @@ env_runner:
   debug: False
   shape_meta: *shape_meta
   n_action_steps: ${n_action_steps}
+  action_size: 8
 
 # down_sample_steps: how many steps to skip in the raw data for the given usage
 # horizon: how many steps to look ahead(action) or back(obs) after downsample for the given usage

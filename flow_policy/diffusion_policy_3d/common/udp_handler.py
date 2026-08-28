@@ -5,13 +5,12 @@ import numpy as np
 
 
 class TeleopUDPHandler:
-    def __init__(self, remote_ip, send_port, action_size=7, DOF=7, horizon=5):
+    def __init__(self, remote_ip, send_port, action_size=7, horizon=5):
         """
         :param remote_ip: IP address of the target (e.g., '127.0.0.1')
         :param send_port: The port the target is listening on.
         :param dof: Degrees of freedom (default 7).
         """
-        self.dof = DOF
         self.horizon = horizon
 
         self.remote_ip = remote_ip

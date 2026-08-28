@@ -62,6 +62,46 @@ shape_meta: &shape_meta
         horizon: ${horizon}
         down_sample_steps: 10
 
+# this really shouldnt be here ... teehee
+base_shape_meta: &base_shape_meta
+  obs:
+    front_img:
+        shape: *image_shape
+        type: rgb
+    wrist_img:
+        shape: *image_shape
+        type: rgb
+    state:
+      shape: [17] # [...7dofjp, ...ee pos, ...2x3 rows of rotation matrix]
+      type: low_dim
+  action:
+    shape: [8]
+  sample:
+    # (ms) time held free at the end of each episode so every sparse query still has room for its full action horizon.
+    training_duration_per_sparse_query: 3000
+    obs:
+      sparse:
+        # down_sample_steps: how many raw steps to skip in that key's own channel
+        # horizon: how many downsampled steps to look back, for this usage
+        # low dim data is 500hz (https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteML/online_learning/configs/config_v1.py#L18) and img data is 60hz (https://github.com/yifan-hou/cr-dagger/blob/main/PyriteUtility/PyriteUtility/hardware_interface/multi_uvc_camera.py).
+        # how long things take = (down_sample_steps * (horizon - 1))/hz
+        state: # last 0.2s of low_dim
+          horizon: 3
+          down_sample_steps: 50
+          source: low_dim
+        front_img: # just use 1 image
+          horizon: 1
+          down_sample_steps: 1 # NOTE: this will likely have to change if horizon is not 1
+          source: img
+        wrist_img:
+          horizon: 1
+          down_sample_steps: 1
+          source: img
+    action:
+      sparse:
+        horizon: 16
+        down_sample_steps: 50
+
 
 env_runner:
   _target_: diffusion_policy_3d.env_runner.cr_udp_runner.CrUdpRunner
@@ -77,7 +117,11 @@ env_runner:
   loop_hz: 500
   debug: False
   shape_meta: *shape_meta
-  n_action_steps: ${n_action_steps}
+  base_shape_meta: *base_shape_meta
+  base_n_action_steps: 8
+  res_n_action_steps: ${n_action_steps}
+  base_action_size: 15
+  res_action_size: 15
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_async_dataset.LabRealAsyncDataset

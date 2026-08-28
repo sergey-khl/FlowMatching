@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
-class TrainFlowMatchingWorkspace(BaseWorkspace):
+class EvalFlowMatchingWorkspace(BaseWorkspace):
     include_keys = ['global_step', 'epoch']
     exclude_keys = tuple()
 
@@ -99,7 +99,7 @@ class TrainFlowMatchingWorkspace(BaseWorkspace):
     config_path=str(pathlib.Path(__file__).resolve().parent.parent.joinpath("config")),
     config_name=pathlib.Path(__file__).stem)
 def main(cfg):
-    workspace = TrainFlowMatchingWorkspace(cfg)
+    workspace = EvalFlowMatchingWorkspace(cfg)
     workspace.eval()
 
 if __name__ == "__main__":
