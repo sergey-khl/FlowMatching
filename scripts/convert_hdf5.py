@@ -159,8 +159,8 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp-apple-corr-60/"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-60_corr-{IMPORTANCE_POWER}.zarr"
+    expert_data_paths = ["/mnt/10tb/serg/datasets/wipe-board-81/"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_wipe-board-81_nocorr-{IMPORTANCE_POWER}.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -293,14 +293,14 @@ if __name__ == "__main__":
                 jp_ds[j],
                 cart_pos_ds[j],
                 rotmats_ds[j],
-                [gripper_pos_ds[j]],
+                # [gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
                 jp_ds[j + 1],
                 # delta_jp,
-                [gripper_action],
-                human_torque[j + 1]
+                # [gripper_action],
+                # human_torque[j + 1]
             ]).astype(np.float32)  # (7,)
  
             if has_weights:
@@ -358,15 +358,15 @@ if __name__ == "__main__":
         total_count += episode_len
 
         if has_images:
-            # front_image = images["front_image"]["images"]  # (M, H, W, 3)
-            # wrist_image = images["wrist_image"]["images"]   # (K, H, W, 3)
-            front_image = images["front_img"]["images"]  # (M, H, W, 3)
-            wrist_image = images["wrist_img"]["images"]   # (K, H, W, 3)
+            front_image = images["front_image"]["images"]  # (M, H, W, 3)
+            wrist_image = images["wrist_image"]["images"]   # (K, H, W, 3)
+            # front_image = images["front_img"]["images"]  # (M, H, W, 3)
+            # wrist_image = images["wrist_img"]["images"]   # (K, H, W, 3)
 
-            # front_timestamps_ns = images["front_image"]["front_img_timestamp_ns"][:]
-            # wrist_timestamps_ns = images["wrist_image"]["wrist_img_timestamp_ns"][:]
-            front_timestamps_ns = images["front_img"]["front_img_timestamp_ns"][:]
-            wrist_timestamps_ns = images["wrist_img"]["wrist_img_timestamp_ns"][:]
+            front_timestamps_ns = images["front_image"]["front_img_timestamp_ns"][:]
+            wrist_timestamps_ns = images["wrist_image"]["wrist_img_timestamp_ns"][:]
+            # front_timestamps_ns = images["front_img"]["front_img_timestamp_ns"][:]
+            # wrist_timestamps_ns = images["wrist_img"]["wrist_img_timestamp_ns"][:]
 
             # downsample using front camera as the anchor
             img_idxs = downsample_by_timestamp(front_timestamps_ns, IMG_TARGET_DT_NS)
