@@ -297,8 +297,8 @@ if __name__ == "__main__":
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
-                # jp_ds[j + 1],
-                delta_jp,
+                jp_ds[j + 1],
+                # delta_jp,
                 [gripper_action],
                 human_torque[j + 1]
             ]).astype(np.float32)  # (7,)
