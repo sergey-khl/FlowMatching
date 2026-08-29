@@ -120,7 +120,7 @@ env_runner:
   base_shape_meta: *base_shape_meta
   base_n_action_steps: 8
   res_n_action_steps: ${n_action_steps}
-  base_action_size: 15
+  base_action_size: 8
   res_action_size: 15
 
 dataset:

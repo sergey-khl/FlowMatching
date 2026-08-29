@@ -410,33 +410,33 @@ class CrUdpRunner(BaseRunner):
 
                     try:
                         action_chunk, time_to_skip_ns = self._base_infer_result_q.get_nowait()
-                        print("---------------------BASE action")
-
-                        for action in action_chunk:
-                            print(list(action))
-                        print("---------------------\n\n")
-
-                        print(f"base took {self.base_inference_time}")
-                        print(f"base skipping {base_time_to_chunk_end_s}")
+                        # print("---------------------BASE action")
+                        #
+                        # for action in action_chunk:
+                        #     print(list(action))
+                        # print("---------------------\n\n")
+                        #
+                        # print(f"base took {self.base_inference_time}")
+                        # print(f"base skipping {base_time_to_chunk_end_s}")
                         base_time_to_skip_ns = base_time_to_chunk_end_ns
-                        # self.follower_sender.send_action_chunk(action_chunk, time_to_skip_ns)
-                        # self.leader_sender.send_action_chunk(action_chunk, time_to_skip_ns)
+                        self.base_follower_sender.send_action_chunk(action_chunk, base_time_to_skip_ns)
+                        self.base_leader_sender.send_action_chunk(action_chunk, base_time_to_skip_ns)
                     except queue.Empty:
                         pass
 
                     try:
                         action_chunk, time_to_skip_ns = self._res_infer_result_q.get_nowait()
-                        print("---------------------RES action")
-
-                        for action in action_chunk:
-                            print(list(action))
-                        print("---------------------\n\n")
-
-                        print(f"res took {self.res_inference_time}")
-                        print(f"res skipping {res_time_to_chunk_end_s}")
+                        # print("---------------------RES action")
+                        #
+                        # for action in action_chunk:
+                        #     print(list(action))
+                        # print("---------------------\n\n")
+                        #
+                        # print(f"res took {self.res_inference_time}")
+                        # print(f"res skipping {res_time_to_chunk_end_s}")
                         res_time_to_skip_ns = res_time_to_chunk_end_ns
-                        # self.follower_sender.send_action_chunk(action_chunk, time_to_skip_ns)
-                        # self.leader_sender.send_action_chunk(action_chunk, time_to_skip_ns)
+                        self.res_follower_sender.send_action_chunk(action_chunk, res_time_to_skip_ns)
+                        self.res_leader_sender.send_action_chunk(action_chunk, res_time_to_skip_ns)
                     except queue.Empty:
                         pass
 

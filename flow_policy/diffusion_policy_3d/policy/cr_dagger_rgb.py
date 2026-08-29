@@ -143,14 +143,9 @@ class CrDaggerRGB(BasePolicy):
         naction_pred = nsample[..., :Da]
         action_pred = self.normalizer["action"].unnormalize(naction_pred)
 
-        # get action
-        start = To - 1
-        end = start + self.n_action_steps
-        action = action_pred[:, start:end]
-
         # get prediction
         result = {
-            "action": action,
+            "action": action_pred,
             "action_pred": action_pred,
         }
 

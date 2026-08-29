@@ -125,6 +125,14 @@ class Recorder:
         idxs = idxs - (np.abs(query_timestamps - left) < np.abs(query_timestamps - right))
         return idxs
 
+    def _gather_raw_low_dim(self, key, raw_ids):
+        if key == "ext_torque":
+            key = "filtered_human_torque"
+        elif key == "policy_cmd":
+            key = "policy_jp"
+        data = np.asarray(self.low_dim_data[key], dtype=np.float32)
+        return data[raw_ids]
+
     def _gather_state(self, raw_ids):
         leader_jp = np.asarray(self.low_dim_data["leader_jp"])            # (N,7)
         leader_cart_pos = np.asarray(self.low_dim_data["leader_cart_pos"])  # (N,3)
@@ -191,12 +199,15 @@ class Recorder:
             source = cfg.get("source", "low_dim")
             span = (horizon - 1) * down_sample_steps
 
-            if source == "low_dim" or source == "policy_cmd":
+            if source == "low_dim":
                 if low_dim_center < span:
                     return None
                 ds_ids = np.arange(low_dim_center - span, low_dim_center + 1, down_sample_steps)
                 raw_ids = low_dim_ds_idx[ds_ids]
-                obs_result[key] = self._gather_state(raw_ids)
+                if key == "state":
+                    obs_result[key] = self._gather_state(raw_ids)
+                else:
+                    obs_result[key] = self._gather_raw_low_dim(key, raw_ids)
             elif source == "img":  # img
                 if img_center < span:
                     return None
