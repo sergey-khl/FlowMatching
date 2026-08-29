@@ -103,7 +103,10 @@ class BaseWorkspace:
                 raise FileNotFoundError(f"no checkpoint found for epoch {tag}")
             return pathlib.Path(self.output_dir).joinpath('checkpoints', match_ckpt)
         else:
-            raise NotImplementedError(f"tag {tag} not implemented")
+            try:
+                return pathlib.Path(tag)
+            except Exception as e:
+                raise NotImplementedError(f"tag {tag} not implemented. got err {e}")
 
     def load_payload(self, payload, exclude_keys=None, include_keys=None, **kwargs):
         if exclude_keys is None:

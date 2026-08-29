@@ -197,7 +197,7 @@ class Recorder:
                 ds_ids = np.arange(low_dim_center - span, low_dim_center + 1, down_sample_steps)
                 raw_ids = low_dim_ds_idx[ds_ids]
                 obs_result[key] = self._gather_state(raw_ids)
-            else:  # img
+            elif source == "img":  # img
                 if img_center < span:
                     return None
                 ds_ids = np.arange(img_center - span, img_center + 1, down_sample_steps)

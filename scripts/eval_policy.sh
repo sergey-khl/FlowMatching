@@ -1,4 +1,6 @@
 # bash scripts/eval_policy.sh eval_flow_matching rtc_flow_match_rgb wam_plug-asus_base_2cam 0001 0 0
+# bash scripts/eval_policy.sh eval_flow_matching rtc_flow_match_rgb wam_wipe-board_base_2cam 0001 0 0
+# bash scripts/eval_policy.sh eval_cr_dagger cr_dagger_rgb wam_pandp-apple_base_2cam 0001 0 0
 
 
 

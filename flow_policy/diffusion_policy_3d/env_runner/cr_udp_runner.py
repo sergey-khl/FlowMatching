@@ -319,7 +319,7 @@ class CrUdpRunner(BaseRunner):
 
             self._res_inference_busy.set()
             with torch.no_grad():
-                action_dict = res_policy.predict_action(obs_dict, self.past_actions)
+                action_dict = res_policy.predict_action(obs_dict)
             np_action_dict = dict_apply(action_dict, lambda x: x.detach().to('cpu').numpy())
             action_chunk = np_action_dict['action'].squeeze(0)
 
@@ -378,7 +378,7 @@ class CrUdpRunner(BaseRunner):
                         self._handle_new_frames(new_frames)
 
                     if len(new_states) > 0:
-                        base_time_to_chunk_end_ns = new_states[-1]["base_time_to_chunk_end_ns"] 
+                        base_time_to_chunk_end_ns = new_states[-1]["time_to_chunk_end_ns"] 
                         base_time_to_chunk_end_s = base_time_to_chunk_end_ns / 1e9
                         base_interval_elapsed = (time.time() - self.base_last_send_time) >= self.send_interval
 

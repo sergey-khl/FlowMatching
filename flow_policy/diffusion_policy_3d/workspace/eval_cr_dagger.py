@@ -49,6 +49,31 @@ class EvalCrDaggerWorkspace(BaseWorkspace):
         self.base_model = hydra.utils.instantiate(cfg.base_policy)
         self.model = hydra.utils.instantiate(cfg.policy)
 
+        self.ema_model = None
+        self.base_ema_model = None
+        if cfg.training.use_ema:
+            try:
+                self.ema_model = copy.deepcopy(self.model)
+            except: # minkowski engine could not be copied. recreate it
+                self.ema_model = hydra.utils.instantiate(cfg.policy)
+
+            try:
+                self.base_ema_model = copy.deepcopy(self.base_model)
+            except: # minkowski engine could not be copied. recreate it
+                self.base_ema_model = hydra.utils.instantiate(cfg.base_policy)
+
+
+        # configure training state
+        self.optimizer = hydra.utils.instantiate(
+            cfg.optimizer, params=self.model.parameters())
+
+        self.base_optimizer = hydra.utils.instantiate(
+            cfg.optimizer, params=self.base_model.parameters())
+
+        # configure training state
+        self.global_step = 0
+        self.epoch = 0
+
     def eval(self):
         # load the latest checkpoint
         
@@ -58,6 +83,14 @@ class EvalCrDaggerWorkspace(BaseWorkspace):
         if ckpt_path.is_file():
             cprint(f"EVAL on checkpoint {ckpt_path}", 'magenta')
             self.load_checkpoint(path=ckpt_path)
+
+        base_ckpt_path = self.get_checkpoint_path(tag=cfg.policy.obs_encoder.base_policy_ckpt)
+        if base_ckpt_path.is_file():
+            cprint(f"EVAL on checkpoint {base_ckpt_path}", 'magenta')
+            base_payload = torch.load(base_ckpt_path.open('rb'), pickle_module=dill)
+            self.base_model.load_state_dict(base_payload['state_dicts']['model'])
+            if cfg.training.use_ema and 'ema_model' in base_payload['state_dicts']:
+                self.base_ema_model.load_state_dict(base_payload['state_dicts']['ema_model'])
         
         # configure env
         env_runner: BaseRunner
@@ -65,6 +98,10 @@ class EvalCrDaggerWorkspace(BaseWorkspace):
             cfg.task.env_runner,
             output_dir=self.output_dir)
         assert isinstance(env_runner, BaseRunner)
+
+        res_policy = self.ema_model if cfg.training.use_ema else self.model
+        base_policy = self.base_ema_model if cfg.training.use_ema else self.base_model
+
         base_policy = self.base_model
         res_policy = self.model
         base_policy.eval()
