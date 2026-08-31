@@ -352,7 +352,7 @@ class DgUdpRunner(BaseRunner):
                         #
                         # print(f"took {self.inference_time}")
                         # print(f"skipping {time_to_chunk_end_s}")
-                        time_to_skip_ns = time_to_chunk_end_ns
+                        time_to_skip_ns = time_to_skip_ns
                         self.follower_sender.send_action_chunk(action_chunk, time_to_skip_ns)
                         self.leader_sender.send_action_chunk(action_chunk, time_to_skip_ns)
                     except queue.Empty:

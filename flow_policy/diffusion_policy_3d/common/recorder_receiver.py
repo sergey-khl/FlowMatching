@@ -108,7 +108,7 @@ class RecorderReceiver:
         idx_gripper_torque = dof * 13 + 16
         idx_time_to_chunk_end = dof * 13 + 17
         idx_res_time_to_chunk_end = dof * 13 + 18
- 
+
         return {
             "follower_jp": list(unpacked[idx_follower_jp:idx_follower_jv]),
             "follower_jv": list(unpacked[idx_follower_jv:idx_follower_dyngravcomp_torque]),
