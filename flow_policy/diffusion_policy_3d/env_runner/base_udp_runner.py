@@ -59,6 +59,8 @@ class BaseUdpRunner(BaseRunner):
         self.loop_hz = loop_hz
         self.debug = debug
         self.dt = 1/self.loop_hz
+    
+        self.use_keyboard = False
 
         self.n_action_steps = n_action_steps
         self.shape_meta = shape_meta
@@ -107,8 +109,9 @@ class BaseUdpRunner(BaseRunner):
         self.joy_fd = None
         self._init_joystick()
  
-        self.kb_listener = keyboard.Listener(on_press=self._on_key_press)
-        self.kb_listener.start()
+        if self.use_keyboard:
+            self.kb_listener = keyboard.Listener(on_press=self._on_key_press)
+            self.kb_listener.start()
  
         cprint("Initialization complete. Running UDP inference loop...", "green")
         cprint("Controls: [R]/o Start recording | [D]/x Stop+Save", "cyan")

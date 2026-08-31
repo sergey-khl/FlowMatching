@@ -143,7 +143,7 @@ class Recorder:
                 leader_jp[i],
                 leader_cart_pos[i],
                 self._quat_to_rotmat(leader_quat[i]),
-                [gripper_pos[i]],
+                # [gripper_pos[i]],
             ]).astype(np.float32)
             for i in raw_ids
         ]
