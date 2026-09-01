@@ -239,7 +239,7 @@ logging:
   group: ${exp_name}
   id: null
   mode: online
-  name: cr-dagger-${task.name}-${training.seed}
+  name: gcr-dagger-${task.name}-${training.seed}
   project: dp3-flow
   resume: true
   tags:

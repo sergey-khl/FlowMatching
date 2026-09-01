@@ -135,6 +135,15 @@ class CrUdpRunner(BaseRunner):
         cprint("CR-DAgger ready. Running UDP inference loop...", "green")
         cprint("Controls: [R]/o Start recording | [D]/x Stop+Save", "cyan")
 
+    def warmup(self, policy: BasePolicy, res_policy: BasePolicy):
+        cprint("Warming up policy...", "green")
+        base_example_obs_dict = self.recorder.get_example_obs_dict(self.base_obs_key_horizons)
+        res_example_obs_dict = self.recorder.get_example_obs_dict(self.res_obs_key_horizons)
+        with torch.no_grad():
+             policy.predict_action(base_example_obs_dict, None)
+             res_policy.predict_action(res_example_obs_dict)
+        cprint("Done Warmup", "green")
+
     def _init_joystick(self):
         """Initializes the joystick file descriptor in non-blocking mode."""
         try:

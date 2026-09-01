@@ -225,3 +225,31 @@ class Recorder:
             obs_result,
             lambda x: torch.from_numpy(x).unsqueeze(0).to(device=device, dtype=dtype),
         )
+
+    
+    def get_example_obs_dict(self, obs_key_horizons: dict, device="cuda", dtype=torch.float32):
+        """
+        Build a dummy batched obs_dict for a dry run of the policy.
+        """
+        obs_result = {}
+        for key, cfg in obs_key_horizons.items():
+            horizon = cfg["horizon"]
+            source = cfg.get("source", "low_dim")
+            
+            if source == "low_dim":
+                if key == "state":
+                    # 7 (jp) + 3 (cart_pos) + 6 (rotmat) + 1 (gripper) = 17
+                    shape = (1, horizon, 17)
+                elif key in ["leader_jp", "policy_cmd", "filtered_human_torque", "ext_torque"]:
+                    shape = (1, horizon, 7)
+            elif source == "weight":
+                continue
+            elif source == "img":
+                shape = (1, horizon, 3, 224, 224)
+            else:
+                raise ValueError(f"get_example_obs_dict: unrecognized source '{source}' for key '{key}'")
+                
+            obs_result[key] = torch.zeros(shape, device=device, dtype=dtype)
+            
+        return obs_result
+

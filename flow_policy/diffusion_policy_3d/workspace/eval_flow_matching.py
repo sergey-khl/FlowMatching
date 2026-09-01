@@ -86,6 +86,7 @@ class EvalFlowMatchingWorkspace(BaseWorkspace):
         policy.eval()
         policy.cuda()
 
+        runner_log = env_runner.warmup(policy)
         runner_log = env_runner.run(policy)
         
       

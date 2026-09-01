@@ -109,6 +109,7 @@ class EvalCrDaggerWorkspace(BaseWorkspace):
         res_policy.eval()
         res_policy.cuda()
 
+        runner_log = env_runner.warmup(base_policy, res_policy)
         runner_log = env_runner.run(base_policy, res_policy)
         
       

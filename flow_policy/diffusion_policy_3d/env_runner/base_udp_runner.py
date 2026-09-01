@@ -112,9 +112,16 @@ class BaseUdpRunner(BaseRunner):
         if self.use_keyboard:
             self.kb_listener = keyboard.Listener(on_press=self._on_key_press)
             self.kb_listener.start()
- 
+
         cprint("Initialization complete. Running UDP inference loop...", "green")
         cprint("Controls: [R]/o Start recording | [D]/x Stop+Save", "cyan")
+
+    def warmup(self, policy: BasePolicy):
+        cprint("Warming up policy...", "green")
+        example_obs_dict = self.recorder.get_example_obs_dict(self.obs_key_horizons)
+        with torch.no_grad():
+             policy.predict_action(example_obs_dict, None)
+        cprint("Done Warmup", "green")
 
     def _init_joystick(self):
         """Initializes the joystick file descriptor in non-blocking mode."""
@@ -207,6 +214,7 @@ class BaseUdpRunner(BaseRunner):
 
             cprint(f"\n[RUNNER] \U0001F4BE Saved {ep_name}. Ready for next episode.", "green")
             cprint("Press [R] or 'o' to start recording", "cyan")
+
 
     def _handle_stop(self):
         """'down' on joystick: stop recording, stop any action sending."""

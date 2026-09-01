@@ -115,6 +115,13 @@ class DgUdpRunner(BaseRunner):
  
         cprint("Initialization complete. Running UDP inference loop...", "green")
         cprint("Controls: [R]/o Start recording | [D]/x Stop+Save", "cyan")
+        
+    def warmup(self, policy: BasePolicy):
+        cprint("Warming up policy...", "green")
+        example_obs_dict = self.recorder.get_example_obs_dict(self.obs_key_horizons)
+        with torch.no_grad():
+             policy.predict_action(example_obs_dict, None)
+        cprint("Done Warmup", "green")
 
     def _init_joystick(self):
         """Initializes the joystick file descriptor in non-blocking mode."""
