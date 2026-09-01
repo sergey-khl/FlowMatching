@@ -31,6 +31,8 @@ TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
 IMG_TARGET_FPS = 30
 IMG_TARGET_DT_NS = int(1e9 / IMG_TARGET_FPS)  # 100_000_000 ns
 
+ACTION_DOWNSAMPLE = 10 # used in delta actions
+
 def find_nearest_index(timestamps, target_time):
     """Return index of the timestamp closest to target_time."""
     return int(np.argmin(np.abs(timestamps - target_time)))
@@ -160,7 +162,7 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
     expert_data_paths = ["/mnt/10tb/serg/datasets/pandp-apple-corr-41/"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-41_corr-{IMPORTANCE_POWER}_abs-action.zarr"
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-41_corr-{IMPORTANCE_POWER}_delta-action.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -277,13 +279,13 @@ if __name__ == "__main__":
         episode_weight_arrays = []
 
         # raw robot data comes in at 500hz
-        for j in range(len(idxs) - 1):
+        for j in range(len(idxs) - ACTION_DOWNSAMPLE):
             # delta_pos = cart_pos_ds[j + 1] - cart_pos_ds[j]
             # delta_rot = delta_rotvec(cart_rot_ds[j], cart_rot_ds[j + 1])
             # delta_rot = delta_euler(euler_ds[j], euler_ds[j + 1])
             # delta_rot = delta_quats(quats_ds[j], quats_ds[j + 1])
-            delta_jp = jp_ds[j + 1] - jp_ds[j]
-            gripper_action = gripper_action_ds[j + 1]
+            delta_jp = jp_ds[j + ACTION_DOWNSAMPLE] - jp_ds[j]
+            gripper_action = gripper_action_ds[j + ACTION_DOWNSAMPLE]
  
             # if is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
             #     noop_count += 1
@@ -297,10 +299,10 @@ if __name__ == "__main__":
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
-                jp_ds[j + 1],
-                # delta_jp,
+                # jp_ds[j + 1],
+                delta_jp,
                 [gripper_action],
-                human_torque[j + 1]
+                human_torque[j] # predicting ff so need the current torque
             ]).astype(np.float32)  # (7,)
  
             if has_weights:

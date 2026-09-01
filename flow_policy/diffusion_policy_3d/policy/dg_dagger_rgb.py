@@ -224,6 +224,8 @@ class DgDaggerRGB(BasePolicy):
             else:
                 correction_scale = correction_scale.view(B, self.horizon, 1)
 
+            print(f"CORRECTION SCALE: {correction_scale[0][0]}")
+
             step = base_step + correction_scale * (corrected_step - base_step)
 
             step = step[..., : self.action_dim]  # only keep action dim

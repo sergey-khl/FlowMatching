@@ -34,6 +34,8 @@ policy:
   crop_shape:
   - 80
   - 80
+  # - 224
+  # - 224
   horizon: ${horizon}
   kernel_size: 5
   n_action_steps: ${n_action_steps}

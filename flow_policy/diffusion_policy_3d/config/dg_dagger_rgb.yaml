@@ -65,6 +65,7 @@ policy:
     reduce_pretrained_lr: True
 
     base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_pandp-apple_base_2cam/checkpoints/wam_pandp-apple_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
+    # base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_wipe-board_base_2cam/checkpoints/wam_wipe-board_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
 
     ##### from scratch #####
     # model_name: 'vit_base_patch16_224'
@@ -187,7 +188,7 @@ logging:
   group: ${exp_name}
   id: null
   mode: online
-  name: rtc_flow_match-${task.name}-${training.seed}
+  name: dg-dagger-${task.name}-${training.seed}
   project: dp3-flow
   resume: true
   tags:

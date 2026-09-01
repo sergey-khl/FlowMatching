@@ -67,11 +67,12 @@ class DgUdpRunner(BaseRunner):
         self.obs_key_horizons = shape_meta['sample']['obs']['sparse']
         self.past_actions = None
 
-        self.send_interval = 0.2  # after sending dont do anythign for at least this amount of time
+        self.send_interval = 0.4  # after sending dont do anythign for at least this amount of time
         self.last_send_time = 0.0
 
         self.inference_time = 0.1          # estimate of how long inf takes
         self.inference_time_alpha = 0.2    # EMA smoothing factor for the estimate
+        self.inf_buffer = 0.0 # little buffer to account for extra latencies like communication
 
         self._infer_request_q = queue.Queue(maxsize=1)   # pending obs
         self._infer_result_q = queue.Queue(maxsize=1)    # pending action
@@ -355,7 +356,8 @@ class DgUdpRunner(BaseRunner):
                         #
                         # print(f"took {self.inference_time}")
                         # print(f"skipping {time_to_chunk_end_s}")
-                        time_to_skip_ns = time_to_skip_ns
+                        time_to_skip_ns = time_to_skip_ns + int(self.inf_buffer * 1e9)
+                        print(f"skipping {time_to_skip_ns / 1e9}")
                         self.follower_sender.send_action_chunk(action_chunk, time_to_skip_ns)
                         self.leader_sender.send_action_chunk(action_chunk, time_to_skip_ns)
                     except queue.Empty:

@@ -74,13 +74,15 @@ class CrUdpRunner(BaseRunner):
         self.res_obs_key_horizons = shape_meta['sample']['obs']['sparse']
         self.past_actions = None
 
-        self.send_interval = 0.05  # should be roughly equal to the time it takes to interpolate to avoid reinferring
+        self.base_send_interval = 0.4  # should be roughly equal to the time it takes to interpolate to avoid reinferring
+        self.res_send_interval = 0.05  # should be roughly equal to the time it takes to interpolate to avoid reinferring
         self.base_last_send_time = 0.0
         self.res_last_send_time = 0.0
 
         self.inference_time_alpha = 0.2    # EMA smoothing factor for the estimate
         self.base_inference_time = 0.1          # estimate of how long inf takes
-        self.res_inference_time = 0.1          # estimate of how long inf takes
+        self.res_inference_time = 0.01          # estimate of how long inf takes
+        self.inf_buffer = 0.0 # little buffer to account for extra latencies like communication
 
         self._base_infer_request_q = queue.Queue(maxsize=1)   # pending obs
         self._base_infer_result_q = queue.Queue(maxsize=1)    # pending action
@@ -383,11 +385,11 @@ class CrUdpRunner(BaseRunner):
                     if len(new_states) > 0:
                         base_time_to_chunk_end_ns = new_states[-1]["time_to_chunk_end_ns"] 
                         base_time_to_chunk_end_s = base_time_to_chunk_end_ns / 1e9
-                        base_interval_elapsed = (time.time() - self.base_last_send_time) >= self.send_interval
+                        base_interval_elapsed = (time.time() - self.base_last_send_time) >= self.base_send_interval
 
                         res_time_to_chunk_end_ns = new_states[-1]["res_time_to_chunk_end_ns"] 
                         res_time_to_chunk_end_s = res_time_to_chunk_end_ns / 1e9
-                        res_interval_elapsed = (time.time() - self.res_last_send_time) >= self.send_interval
+                        res_interval_elapsed = (time.time() - self.res_last_send_time) >= self.res_send_interval
 
                         base_should_infer = (base_time_to_chunk_end_s <= self.base_inference_time) and base_interval_elapsed
                         res_should_infer = (res_time_to_chunk_end_s <= self.res_inference_time) and res_interval_elapsed
@@ -420,8 +422,8 @@ class CrUdpRunner(BaseRunner):
                         # print("---------------------\n\n")
                         #
                         # print(f"base took {self.base_inference_time}")
-                        # print(f"base skipping {base_time_to_chunk_end_s}")
-                        base_time_to_skip_ns = time_to_skip_ns
+                        base_time_to_skip_ns = time_to_skip_ns + int(self.inf_buffer * 1e9)
+                        print(f"base skipping {base_time_to_skip_ns / 1e9}")
                         self.base_follower_sender.send_action_chunk(action_chunk, base_time_to_skip_ns)
                         self.base_leader_sender.send_action_chunk(action_chunk, base_time_to_skip_ns)
                     except queue.Empty:
@@ -437,7 +439,8 @@ class CrUdpRunner(BaseRunner):
                         #
                         # print(f"res took {self.res_inference_time}")
                         # print(f"res skipping {res_time_to_chunk_end_s}")
-                        res_time_to_skip_ns = time_to_skip_ns
+                        res_time_to_skip_ns = time_to_skip_ns + int(self.inf_buffer * 1e9)
+                        print(f"res skipping {res_time_to_skip_ns / 1e9}")
                         self.res_follower_sender.send_action_chunk(action_chunk, res_time_to_skip_ns)
                         self.res_leader_sender.send_action_chunk(action_chunk, res_time_to_skip_ns)
                     except queue.Empty:
