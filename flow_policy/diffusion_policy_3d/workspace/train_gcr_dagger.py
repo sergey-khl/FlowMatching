@@ -69,8 +69,7 @@ class TrainGCrDaggerWorkspace(BaseWorkspace):
                 self.ema_model = hydra.utils.instantiate(cfg.policy)
 
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
-        self.optimizer = hydra.utils.instantiate(
-            cfg.optimizer, params=trainable_params)
+        self.optimizer = hydra.utils.instantiate(cfg.optimizer, params=trainable_params)
 
         self.global_step = 0
         self.epoch = 0
@@ -96,12 +95,14 @@ class TrainGCrDaggerWorkspace(BaseWorkspace):
         
         RUN_VALIDATION = False # reduce time cost
         
+        resumed = False
         # resume training
         lastest_ckpt_path = self.get_checkpoint_path()
         
         if getattr(cfg.training, 'resume', False) and lastest_ckpt_path.is_file():
             cprint(f"Resuming training run from local checkpoint {lastest_ckpt_path}", "green")
             self.load_checkpoint(path=lastest_ckpt_path)
+            resumed = True
 
         # configure dataset
         dataset: BaseDataset
@@ -172,6 +173,14 @@ class TrainGCrDaggerWorkspace(BaseWorkspace):
             self.ema_model.to(device)
         optimizer_to(self.optimizer, device)
 
+        # calc null feature once at start of training
+        if not resumed:
+            null_err = self.model.solve_null_feature()
+            cprint(f"[GcrDagger] solved null feature, null residual mse={null_err:.6f}", "green")
+            if self.ema_model is not None:
+                with torch.no_grad():
+                    self.ema_model.null_feat.data.copy_(self.model.null_feat.data)
+
         # save batch for sampling
         train_sampling_batch = None
 
@@ -227,8 +236,6 @@ class TrainGCrDaggerWorkspace(BaseWorkspace):
 
                     step_log = {
                         'train_loss': raw_loss_cpu,
-                        'gate_loss': loss_dict["gate_loss"],
-                        'mse_loss': loss_dict["bc_loss"],
                         'global_step': self.global_step,
                         'epoch': self.epoch,
                         'lr': lr_scheduler.get_last_lr()[0],

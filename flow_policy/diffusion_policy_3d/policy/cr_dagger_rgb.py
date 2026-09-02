@@ -201,7 +201,7 @@ class CrDaggerRGB(BasePolicy):
         loss = loss.sum()
 
         loss_dict = {
-            "bc_loss": loss.item(),
+            "residual_loss": loss.item(),
         }
 
         return loss, loss_dict

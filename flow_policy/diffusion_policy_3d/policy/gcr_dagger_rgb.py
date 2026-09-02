@@ -84,9 +84,13 @@ class GcrDaggerRGB(BasePolicy):
         self.gate = MLP(
             input_dim=obs_feature_dim,
             action_dim=1, 
-            action_horizon=mlp_cfg.action_horizon,
+            action_horizon=1,
             hidden_dims=mlp_cfg.hidden_dims,
             dropout=mlp_cfg.dropout,
+        )
+        # passing this into the residual will give a 0 residual. useful for gating
+        self.null_feat = nn.Parameter(
+            1e-3 * torch.randn(obs_feature_dim), requires_grad=False
         )
 
         self.obs_encoder = obs_encoder
@@ -107,6 +111,28 @@ class GcrDaggerRGB(BasePolicy):
             param.requires_grad = False
 
         print_params(self)
+
+    def solve_null_feature(self, n_steps=2000, lr=1e-2):
+        """pre solve the 0 residual. should only be done once ever in training and thats it"""
+        self.eval()
+        with torch.no_grad():
+            null_target = self.normalizer["action"].normalize(
+                torch.zeros(self.action_dim, device=self.device)
+            ).detach()
+
+        self.null_feat.requires_grad = True
+        opt = torch.optim.Adam([self.null_feat], lr=lr)
+        loss = torch.tensor(0.0)
+        for _ in range(n_steps):
+            opt.zero_grad()
+            null_pred = self.residual(self.null_feat.unsqueeze(0))  # (1, T, Da)
+            loss = ((null_pred - null_target) ** 2).mean()
+            loss.backward()
+            opt.step()
+        self.null_feat.requires_grad = False  # keeps it out of the main optimizer
+
+        self.train() # go back to training
+        return float(loss.item())
 
     def predict_action(
         self, obs_dict: Dict[str, torch.Tensor]
@@ -136,13 +162,10 @@ class GcrDaggerRGB(BasePolicy):
         global_cond = nobs_features.reshape(B, -1)
 
         # --- GATED PREDICTION ---
-        residual_out = self.residual(global_cond)
-        gate_logits = self.gate(global_cond)
-        gate_val = torch.sigmoid(gate_logits) # Shape: (B, T, 1)
+        gate = torch.sigmoid(self.gate(global_cond)).reshape(B, 1)
+        feat = gate * global_cond + (1.0 - gate) * self.null_feat
+        nsample = self.residual(feat)
         
-        # Broadcast gate over the residual dimensions
-        nsample = gate_val * residual_out
-
         naction_pred = nsample[..., :Da]
         action_pred = self.normalizer["action"].unnormalize(naction_pred)
 
@@ -174,36 +197,34 @@ class GcrDaggerRGB(BasePolicy):
         batch_size = nactions.shape[0]
         trajectory = nactions
 
-        # Only compute gradients for the gating network if freeze_base is True
+        # freeze the encoder
         with torch.set_grad_enabled(False):
             nobs_features = self.obs_encoder(nobs)["result"]
             global_cond = nobs_features.reshape(batch_size, -1)
-            pred_residual = self.residual(global_cond)
-
-        gate_logits = self.gate(global_cond)
-        gate_val = torch.sigmoid(gate_logits)
-        
-        pred = gate_val * pred_residual
-        target = trajectory
-
-        mse_loss = F.mse_loss(pred, target)
 
         weights = batch["weights"] # Shape: (B, T_weight)
-        is_correction_current = (weights[:, -1] > self.correction_weight_threshold).float() # Shape: (B,)
-        
-        if gate_logits.dim() == 2:
-            is_correction_target = is_correction_current.unsqueeze(-1) # (B, 1)
+        if self.batched_weights:
+            w = weights.mean(dim=-1) # (B,)
         else:
-            is_correction_target = is_correction_current.view(-1, 1, 1).expand_as(gate_logits)
+            w = weights[..., -1]  # (B,)
 
-        gate_loss = F.binary_cross_entropy(gate_val, is_correction_target)
+        is_correction = (w > self.correction_weight_threshold).float().unsqueeze(-1)  # (B,1)
         
-        # only backpropagate through the gate loss
-        loss = gate_loss
-        
-        loss_dict = {
-            "bc_loss": mse_loss.item(), # Log original metric for tracking
-            "gate_loss": gate_loss.item(),
-        }
+        gate_logits = self.gate(global_cond).reshape(batch_size, 1)
+        loss = F.binary_cross_entropy_with_logits(gate_logits, is_correction)
+
+        with torch.no_grad():
+            gate = torch.sigmoid(gate_logits)
+            feat = gate * global_cond + (1.0 - gate) * self.null_feat
+            pred = self.residual(feat)
+            mse_loss = F.mse_loss(pred, trajectory)
+
+            mask = is_correction.squeeze(-1) > 0.5
+            loss_dict = {
+                "bc_loss": mse_loss.item(),  # workspace logs this as residual_loss
+                "gate_loss": loss.item(),
+                "gate_mean_corr": gate[mask].mean().item() if mask.any() else float("nan"),
+                "gate_mean_nocorr": gate[~mask].mean().item() if (~mask).any() else float("nan"),
+            }
 
         return loss, loss_dict

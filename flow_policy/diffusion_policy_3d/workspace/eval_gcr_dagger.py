@@ -70,6 +70,14 @@ class EvalGcrDaggerWorkspace(BaseWorkspace):
         self.base_optimizer = hydra.utils.instantiate(
             cfg.optimizer, params=self.base_model.parameters())
 
+        trainable_params = [p for p in self.model.parameters() if p.requires_grad]
+        self.optimizer = hydra.utils.instantiate(
+            cfg.optimizer, params=trainable_params)
+
+        base_trainable_params = [p for p in self.base_model.parameters() if p.requires_grad]
+        self.base_optimizer = hydra.utils.instantiate(
+            cfg.optimizer, params=base_trainable_params)
+
         # configure training state
         self.global_step = 0
         self.epoch = 0
@@ -109,7 +117,7 @@ class EvalGcrDaggerWorkspace(BaseWorkspace):
         res_policy.eval()
         res_policy.cuda()
 
-        runner_log = env_runner.warmup(policy, res_policy)
+        runner_log = env_runner.warmup(base_policy, res_policy)
         runner_log = env_runner.run(base_policy, res_policy)
         
       

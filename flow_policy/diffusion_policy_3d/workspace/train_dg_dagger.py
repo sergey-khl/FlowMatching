@@ -236,10 +236,6 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
 
                     step_log = {
                         'train_loss': raw_loss_cpu,
-                        'unet_loss': loss_dict["bc_loss"],
-                        'base_loss': loss_dict["base_loss"],
-                        'corrected_loss': loss_dict["corrected_loss"],
-                        'scale_loss': loss_dict["scale_loss"],
                         'global_step': self.global_step,
                         'epoch': self.epoch,
                         'lr': lr_scheduler.get_last_lr()[0],

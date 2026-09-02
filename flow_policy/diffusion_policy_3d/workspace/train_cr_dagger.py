@@ -226,7 +226,6 @@ class TrainCrDaggerWorkspace(BaseWorkspace):
 
                     step_log = {
                         'train_loss': raw_loss_cpu,
-                        'residual_loss': loss_dict["bc_loss"],
                         'global_step': self.global_step,
                         'epoch': self.epoch,
                         'lr': lr_scheduler.get_last_lr()[0],
