@@ -34,6 +34,15 @@
 # the human is not interacting with the force torque sensor!! this makes our version way harder. yay!!
 # but also that means they say a correction happens basically whenever there is a lot of ext torque or do they always use the button? not in correction_single_arm
 #
+# https://github.com/yifan-hou/cr-dagger/blob/00700d6513b646719f003a28b488aff593eb663f/PyriteEnvSuites/envs/task/manip_server_env.py#L71 
+# they use force control in all axis' so no velocity control.
+# find total wrench of 4 differenct wrenches, spring, force err, pid, damping. convert to velocity by solving with inertia
+# convert that velocity to a pose cmd
+# the spring wrench is where the ref pose is added
+# https://docs.google.com/document/d/1OGB3R5M62lnUrIzuXUJB2nOg8ef5WupwzwgngtGalOU/edit?tab=t.0#heading=h.z272vf49q1uz
+# as far as I understand they combine damped velocity, spring force of the pose err, and the err of the wrench with no gains.
+# https://github.com/yifan-hou/force_control/blob/mainline/src/admittance_controller.cpp
+#
 # ACTION:
     # last residual is used as diff with current 
     # find the closest policy command before or at the timestamp of the robot command
@@ -62,6 +71,7 @@
 # no ft sensor so force encoder input dim is 7.
 # predicting ext_torque from joints
 # using the traj_weight signal for determening correction threshold
+# different controller but same concept
 
 
 

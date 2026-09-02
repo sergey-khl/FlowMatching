@@ -31,8 +31,6 @@ TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
 IMG_TARGET_FPS = 30
 IMG_TARGET_DT_NS = int(1e9 / IMG_TARGET_FPS)  # 100_000_000 ns
 
-ACTION_DOWNSAMPLE = 10 # used in delta actions
-
 def find_nearest_index(timestamps, target_time):
     """Return index of the timestamp closest to target_time."""
     return int(np.argmin(np.abs(timestamps - target_time)))
@@ -279,13 +277,14 @@ if __name__ == "__main__":
         episode_weight_arrays = []
 
         # raw robot data comes in at 500hz
-        for j in range(len(idxs) - ACTION_DOWNSAMPLE):
+        for j in range(len(idxs) - 1):
             # delta_pos = cart_pos_ds[j + 1] - cart_pos_ds[j]
             # delta_rot = delta_rotvec(cart_rot_ds[j], cart_rot_ds[j + 1])
             # delta_rot = delta_euler(euler_ds[j], euler_ds[j + 1])
             # delta_rot = delta_quats(quats_ds[j], quats_ds[j + 1])
-            delta_jp = jp_ds[j + ACTION_DOWNSAMPLE] - jp_ds[j]
-            gripper_action = gripper_action_ds[j + ACTION_DOWNSAMPLE]
+            # delta_jp = jp_ds[j + 1] - jp_ds[j]
+            residual = jp_ds[j] - policy_cmd_ds[j]
+            gripper_action = gripper_action_ds[j + 1]
  
             # if is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
             #     noop_count += 1
@@ -300,7 +299,7 @@ if __name__ == "__main__":
  
             action = np.concatenate([
                 # jp_ds[j + 1],
-                delta_jp,
+                residual,
                 [gripper_action],
                 human_torque[j] # predicting ff so need the current torque
             ]).astype(np.float32)  # (7,)
