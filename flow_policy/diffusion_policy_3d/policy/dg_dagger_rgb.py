@@ -32,7 +32,6 @@ class DgDaggerRGB(BasePolicy):
         n_obs_steps,
         mlp_cfg,
         num_inference_steps=10,
-        obs_as_global_cond=True,
         diffusion_step_embed_dim=256,
         down_dims=(256, 512, 1024),
         kernel_size=5,
@@ -47,7 +46,6 @@ class DgDaggerRGB(BasePolicy):
         weighted_loss=False,
         batched_weights=False,
         correction_thresh=1.0,
-        scale_loss_weight=1.0,
         max_delay=4,
         # parameters passed to step
         **kwargs,
@@ -55,10 +53,6 @@ class DgDaggerRGB(BasePolicy):
         super().__init__()
 
         self.condition_type = condition_type
-
-        assert (
-            obs_as_global_cond is True
-        ), "only implemented global conditioning for flow matching as of now"
 
         # parse shape_meta
         action_shape = shape_meta["action"]["shape"]
@@ -98,6 +92,12 @@ class DgDaggerRGB(BasePolicy):
 
 
         obs_feature_dim = np.prod(obs_encoder.output_shape())
+        vision_feature_dim = int(np.prod(obs_encoder.vision_output_shape()))
+        torque_feature_dim = int(np.prod(obs_encoder.torque_output_shape()))
+        low_dim_feature_dim = int(np.prod(obs_encoder.low_dim_output_shape()))
+
+        vision_global_dim = vision_feature_dim + low_dim_feature_dim
+        torque_global_dim = torque_feature_dim + low_dim_feature_dim
 
         self.scale_predictor = MLP(
             input_dim=obs_feature_dim,
@@ -106,10 +106,17 @@ class DgDaggerRGB(BasePolicy):
             dropout=mlp_cfg.dropout,
         )
 
-        self.base_unet = ConditionalUnet1D(
+        self.gate = MLP(
+            input_dim=obs_feature_dim,
+            action_horizon=1,
+            hidden_dims=mlp_cfg.hidden_dims, # Use your config's hidden dims
+            dropout=mlp_cfg.dropout,
+        )
+
+        self.vision_unet = ConditionalUnet1D(
             input_dim=action_dim + 1,  # add +1 for time step as extra input.
             local_cond_dim=None,
-            global_cond_dim=obs_feature_dim,
+            global_cond_dim=vision_global_dim,
             diffusion_step_embed_dim=diffusion_step_embed_dim,
             down_dims=down_dims,
             kernel_size=kernel_size,
@@ -120,10 +127,10 @@ class DgDaggerRGB(BasePolicy):
             use_up_condition=use_up_condition,
         )
 
-        self.corrected_unet = ConditionalUnet1D(
+        self.torque_unet = ConditionalUnet1D(
             input_dim=action_dim + 1,  # add +1 for time step as extra input.
             local_cond_dim=None,
-            global_cond_dim=obs_feature_dim,
+            global_cond_dim=torque_global_dim,
             diffusion_step_embed_dim=diffusion_step_embed_dim,
             down_dims=down_dims,
             kernel_size=kernel_size,
@@ -132,13 +139,17 @@ class DgDaggerRGB(BasePolicy):
             use_down_condition=use_down_condition,
             use_mid_condition=use_mid_condition,
             use_up_condition=use_up_condition,
+        )
+
+        self.null_feat = nn.Parameter(
+            1e-3 * torch.randn(obs_feature_dim), requires_grad=False
         )
 
         self.obs_encoder = obs_encoder
 
         self.mask_generator = LowdimMaskGenerator(
             action_dim=action_dim,
-            obs_dim=0 if obs_as_global_cond else obs_feature_dim,
+            obs_dim=0,
             max_n_obs_steps=n_obs_steps,
             fix_obs_steps=True,
             action_visible=False,
@@ -149,29 +160,39 @@ class DgDaggerRGB(BasePolicy):
         self.obs_feature_dim = obs_feature_dim
         self.action_dim = action_dim
         self.n_action_steps = n_action_steps
-        self.obs_as_global_cond = obs_as_global_cond
         self.kwargs = kwargs
         self.weighted_loss = weighted_loss
         self.batched_weights = batched_weights
         self.correction_thresh = correction_thresh
-        self.scale_loss_weight = scale_loss_weight
         self.max_delay = max_delay
 
         self.num_inference_steps = num_inference_steps
 
         print_params(self)
 
+    def solve_null_feature(self, n_steps=2000, lr=1e-2):
+        """pre calc null feature so scale_predictor outputs 0."""
+        self.eval()
+        self.null_feat.requires_grad = True
+        opt = torch.optim.Adam([self.null_feat], lr=lr)
+        loss = torch.tensor(0.0)
+        for _ in range(n_steps):
+            opt.zero_grad()
+            # scale_predictor expects (B, obs_feature_dim)
+            null_pred = F.softplus(self.scale_predictor(self.null_feat.unsqueeze(0)))
+            loss = (null_pred ** 2).mean()
+            loss.backward()
+            opt.step()
+        self.null_feat.requires_grad = False
+        self.train()
+        return float(loss.item())
+
     # ========= inference  ============
     def conditional_sample(
         self,
         action_prefix,
         condition_data,
-        condition_mask,
-        condition_data_pc=None,
-        condition_mask_pc=None,
-        local_cond=None,
-        global_cond=None,
-        generator=None,
+        enc_dict,
         delay=0,
         # keyword arguments to scheduler.step
         **kwargs,
@@ -188,6 +209,19 @@ class DgDaggerRGB(BasePolicy):
         prefix_mask = prefix_mask.to(trajectory.device)
         
         B = condition_data.shape[0]
+
+        vision_feat = enc_dict["vision_feature"]
+        torque_feat = enc_dict["torque_feature"]
+        low_dim_feat = enc_dict["low_dim_feature"]
+        full_feat = enc_dict["result"]
+
+        gate_logits = self.gate(full_feat).reshape(B, 1)
+        gate = torch.sigmoid(gate_logits)
+
+        vision_unet_cond = torch.cat([vision_feat, low_dim_feat], dim=-1)
+        gated_torque_feat = gate * torque_feat
+        torque_unet_cond = torch.cat([gated_torque_feat, low_dim_feat], dim=-1)
+        scale_cond = gate * full_feat + (1 - gate) * self.null_feat
 
         delta = 1.0 / self.num_inference_steps
         for t in torch.arange(0, 1, delta):
@@ -208,17 +242,11 @@ class DgDaggerRGB(BasePolicy):
             )
             model_input = torch.cat([trajectory, tau_masked], dim=-1)
 
-            base_step = self.base_unet(
-                sample=model_input, timestep=tau_tensor,
-                local_cond=local_cond, global_cond=global_cond,
-            )[..., : self.action_dim]
+            vision_step = self.vision_unet(sample=model_input, timestep=tau_tensor, local_cond=None, global_cond=vision_unet_cond)[..., :self.action_dim]
+            torque_step = self.torque_unet(sample=model_input, timestep=tau_tensor, local_cond=None, global_cond=torque_unet_cond)[..., :self.action_dim]
 
-            corrected_step = self.corrected_unet(
-                sample=model_input, timestep=tau_tensor,
-                local_cond=local_cond, global_cond=global_cond,
-            )[..., : self.action_dim]
 
-            correction_scale = F.softplus(self.scale_predictor(global_cond))  # (B,1) or (B,T)
+            correction_scale = F.softplus(self.scale_predictor(scale_cond))  # (B,1) or (B,T)
             if correction_scale.dim() == 2 and correction_scale.shape[1] == 1:
                 correction_scale = correction_scale.view(B, 1, 1)
             else:
@@ -226,7 +254,7 @@ class DgDaggerRGB(BasePolicy):
 
             print(f"CORRECTION SCALE: {correction_scale[0][0]}")
 
-            step = base_step + correction_scale * (corrected_step - base_step)
+            step = vision_step + correction_scale * (torque_step - vision_step)
 
             step = step[..., : self.action_dim]  # only keep action dim
 
@@ -272,33 +300,8 @@ class DgDaggerRGB(BasePolicy):
         device = self.device
         dtype = self.dtype
 
-        # handle different ways of passing observation
-        local_cond = None
-        global_cond = None
-        if self.obs_as_global_cond:
-            # condition through global feature
-            nobs_features = self.obs_encoder(nobs)["result"]
-            if "cross_attention" in self.condition_type: # does nothgin
-                # treat as a sequence
-                global_cond = nobs_features.reshape(B, self.n_obs_steps, -1)
-            else:
-                # reshape back to B, Do
-                global_cond = nobs_features.reshape(B, -1)
-            # empty data for action
-            cond_data = torch.zeros(size=(B, T, Da), device=device, dtype=dtype)
-            cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-        else:
-            # condition through impainting
-            this_nobs = dict_apply(
-                nobs, lambda x: x[:, :To, ...]
-            )
-            nobs_features = self.obs_encoder(this_nobs)
-            # reshape back to B, T, Do
-            nobs_features = nobs_features.reshape(B, To, -1)
-            cond_data = torch.zeros(size=(B, T, Da + Do), device=device, dtype=dtype)
-            cond_mask = torch.zeros_like(cond_data, dtype=torch.bool)
-            cond_data[:, :To, Da:] = nobs_features
-            cond_mask[:, :To, Da:] = True
+        enc_dict = self.obs_encoder(nobs)
+        cond_data = torch.zeros(size=(B, T, Da), device=device, dtype=dtype) # basically just used for finding traj shape
 
         # TODO: pad the action prefix to the correct size.
         action_prefix = torch.zeros(
@@ -319,9 +322,7 @@ class DgDaggerRGB(BasePolicy):
         nsample = self.conditional_sample(
             action_prefix=action_prefix,
             condition_data=cond_data,
-            condition_mask=cond_mask,
-            local_cond=local_cond,
-            global_cond=global_cond,
+            enc_dict=enc_dict,
             delay=current_delay,
             **self.kwargs,
         )
@@ -365,7 +366,7 @@ class DgDaggerRGB(BasePolicy):
             if self.use_depth and self.use_depth_only:
                 nobs[key] = nobs['depth'].unsqueeze(-3)
 
-        batch_size = nactions.shape[0]
+        B = nactions.shape[0]
         horizon = nactions.shape[1]
 
         # handle different ways of passing observation
@@ -374,24 +375,11 @@ class DgDaggerRGB(BasePolicy):
         trajectory = nactions
         cond_data = trajectory
 
-        if self.obs_as_global_cond:
-            # reshape B, T, ... to B*T
-            nobs_features = self.obs_encoder(nobs)["result"]
-
-            if "cross_attention" in self.condition_type: # does nothign
-                # treat as a sequence
-                global_cond = nobs_features.reshape(batch_size, self.n_obs_steps, -1)
-            else:
-                # reshape back to B, Do
-                global_cond = nobs_features.reshape(batch_size, -1)
-        else: # does nothign
-            # reshape B, T, ... to B*T
-            this_nobs = dict_apply(nobs, lambda x: x)
-            nobs_features = self.obs_encoder(this_nobs)
-            # reshape back to B, T, Do
-            nobs_features = nobs_features.reshape(batch_size, horizon, -1)
-            cond_data = torch.cat([nactions, nobs_features], dim=-1)
-            trajectory = cond_data.detach()
+        enc_dict = self.obs_encoder(nobs)
+        vision_feat = enc_dict["vision_feature"]
+        torque_feat = enc_dict["torque_feature"]
+        low_dim_feat = enc_dict["low_dim_feature"]
+        full_feat = enc_dict["result"]
 
         # this is just 0's
         condition_mask = self.mask_generator(trajectory.shape)
@@ -436,61 +424,76 @@ class DgDaggerRGB(BasePolicy):
             [noisy_trajectory, local_timesteps], dim=-1
         )  # (bsz, horizon, action_dim + 1)
 
-        # Predict the vector field
-        base_pred = self.base_unet(
+        # indicator function taking in vision + torque + low_dim
+        gate_logits = self.gate(full_feat).reshape(B, 1)
+        gate = torch.sigmoid(gate_logits) # (B, 1)
+
+        # gated features just like in paper.
+        gated_torque_feat = gate * torque_feat 
+        torque_unet_cond = torch.cat([gated_torque_feat, low_dim_feat], dim=-1)
+
+        # gate the entire feature. have to do it like this because of the precomputation we did
+        scale_cond = gate * full_feat + (1 - gate) * self.null_feat
+
+        # dont gate anything for the vision
+        vision_unet_cond = torch.cat([vision_feat, low_dim_feat], dim=-1)
+
+        vision_pred = self.vision_unet(
             sample=model_input, timestep=global_timesteps,
-            local_cond=local_cond, global_cond=global_cond,
+            local_cond=local_cond, global_cond=vision_unet_cond,
         )[..., : self.action_dim]
 
-        corrected_pred = self.corrected_unet(
+        torque_pred = self.torque_unet(
             sample=model_input, timestep=global_timesteps,
-            local_cond=local_cond, global_cond=global_cond,
+            local_cond=local_cond, global_cond=torque_unet_cond,
         )[..., : self.action_dim]
+
+        pred_scale = F.softplus(self.scale_predictor(scale_cond)) # (B, T)
+        pred_scale = pred_scale.view(B, self.horizon, 1)
+
+        # CFG style update
+        pred_cfg = vision_pred + pred_scale * (torque_pred - vision_pred)
 
         target = noise - trajectory
 
         weights = batch["weights"]  # (B, T)
 
-        if self.batched_weights:
-            is_correction = (weights > self.correction_thresh).unsqueeze(-1)  # (B, T, 1)
-            scale_target = weights  # (B, T)
-        else:  # per_chunk — per-sample trajectory mean, not batch-wide
-            chunk_weight = weights.mean(dim=1, keepdim=True)                  # (B, 1)
-            is_correction = (chunk_weight > self.correction_thresh)
-            is_correction = is_correction.unsqueeze(-1).expand(-1, horizon, -1)  # (B, T, 1)
-            scale_target = chunk_weight.expand(-1, horizon)                    # (B, T)
+        # if self.batched_weights: # not supported yet
+        #     is_correction = (weights > self.correction_thresh).unsqueeze(-1)  # (B, T, 1)
+        #     scale_target = weights  # (B, T)
+        # else:  # per_chunk — per-sample trajectory mean, not batch-wide
+        #     chunk_weight = weights.mean(dim=1, keepdim=True)                  # (B, 1)
+        #     is_correction = (chunk_weight > self.correction_thresh)
+        #     is_correction = is_correction.unsqueeze(-1).expand(-1, horizon, -1)  # (B, T, 1)
+        #     scale_target = chunk_weight.expand(-1, horizon)                    # (B, T)
+        weights = batch["weights"]  # (B, T)
+        chunk_weight = weights.mean(dim=1, keepdim=True)  # (B, 1)
+        gate_target = (chunk_weight > self.correction_thresh).float()
+        scale_target = chunk_weight.expand(-1, horizon)                    # (B, T)
 
-        base_loss_mask = loss_mask & (~is_correction)
-        corr_loss_mask = loss_mask & is_correction
+        # i removed loss mask. RTC broken
+        cfg_loss = F.mse_loss(pred_cfg, target, reduction="none") * loss_mask.type(pred_cfg.dtype)
 
-        base_loss = (F.mse_loss(base_pred, target, reduction="none") * base_loss_mask
-                     ).sum() / base_loss_mask.sum().clamp_min(1.0)
-        corr_loss = (F.mse_loss(corrected_pred, target, reduction="none") * corr_loss_mask
-                     ).sum() / corr_loss_mask.sum().clamp_min(1.0)
-
-        pred_scale = F.softplus(self.scale_predictor(global_cond))  # (B,1) or (B,T)
-        if pred_scale.shape != scale_target.shape:
-            pred_scale = pred_scale.expand_as(scale_target)
+        pred_scale = pred_scale.squeeze()
         scale_loss = F.mse_loss(pred_scale, scale_target)
 
-        loss = base_loss + corr_loss + self.scale_loss_weight * scale_loss
-
-        loss = loss * loss_mask.type(loss.dtype)
+        gate_loss = F.binary_cross_entropy_with_logits(gate_logits, gate_target)
         
-        if self.weighted_loss:
-            weights = batch["weights"].unsqueeze(-1)
-            loss = weights * loss
+        # if self.weighted_loss:
+        #     weights = batch["weights"].unsqueeze(-1)
+        #     loss = weights * loss
         
         # loss = reduce(loss, "b ... -> b (...)", "mean")
         # loss = loss.mean()
         valid_elements_count = loss_mask.sum().clamp_min(1.0)
-        loss = loss.sum() / valid_elements_count
+        cfg_loss = cfg_loss.sum() / valid_elements_count
+
+        loss = cfg_loss + scale_loss + gate_loss
 
         loss_dict = {
-            "bc_loss": (base_loss + corr_loss).item(),
-            "base_loss": base_loss.item(),
-            "corrected_loss": corr_loss.item(),
+            "cfg_loss": cfg_loss.item(),
             "scale_loss": scale_loss.item(),
+            "gate_loss": gate_loss.item(),
         }
 
         return loss, loss_dict

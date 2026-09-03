@@ -18,9 +18,6 @@ shape_meta: &shape_meta
     state:
       shape: [17] # [...7dofjp, ...ee pos, ...2x3 rows of rotation matrix, gripper pos]
       type: low_dim
-    # policy_cmd:
-    #   shape: [7] # last policy jp
-    #   type: low_dim
     ext_torque:
       shape: [7]
       type: low_dim
@@ -43,10 +40,6 @@ shape_meta: &shape_meta
           horizon: 32
           down_sample_steps: 4
           source: low_dim
-        # policy_cmd: # last 0.5s of base policy jp
-        #   horizon: 6
-        #   down_sample_steps: 50
-        #   source: low_dim
         traj_weight: # last 0.02s. not used as part of obs. Should make this more later
           horizon: 3
           down_sample_steps: 5

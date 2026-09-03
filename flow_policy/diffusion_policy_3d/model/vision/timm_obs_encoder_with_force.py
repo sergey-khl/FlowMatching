@@ -408,7 +408,8 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
 
     def forward(self, obs_dict):
         """Assume each image key is (B, T, C, H, W)"""
-        features = list()
+        rgb_features = list()
+        wrench_features = list()
         modality_features = list()
         low_dim_features = list()
         batch_size = next(iter(obs_dict.values())).shape[0]
@@ -429,7 +430,7 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
                 feature=raw_feature,
             )
             assert len(feature.shape) == 2 and feature.shape[0] == B * T
-            features.append(feature.reshape(B, -1))
+            rgb_features.append(feature.reshape(B, -1))
             modality_features.append(feature.reshape(B, T, -1))
             enc_dict[key] = feature.reshape(B, T, -1)
 
@@ -442,7 +443,7 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
             data = data.permute(0, 2, 1)
             feature = self.key_model_map[key](data.float())[:, :, 0]
             assert len(feature.shape) == 2 and feature.shape[0] == B
-            features.append(feature.reshape(B, -1))
+            wrench_features.append(feature.reshape(B, -1))
             modality_features.append(feature.unsqueeze(1))
             enc_dict[key] = feature.unsqueeze(1)
 
@@ -453,16 +454,19 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
             assert B == batch_size
             assert data.shape[2:] == self.key_shape_map[key]
             # directly concatenate actions
-            features.append(data.reshape(B, -1))
             low_dim_features.append(data.reshape(B, -1))
             enc_dict[key] = data
+
+        vision_feat = torch.cat(rgb_features, dim=-1)
+        torque_feat = torch.cat(wrench_features, dim=-1)
+        low_dim_feat = torch.cat(low_dim_features, dim=-1)
 
         # concatenate all features
         if self.v_feature_dim == 0 and self.f_feature_dim == 0:
             result = torch.cat(low_dim_features, dim=-1)
         else:
             if self.fuse_mode == "concat":
-                result = torch.cat(features, dim=-1)
+                result = torch.cat([vision_feat, torque_feat, low_dim_feat], dim=-1)
             elif self.fuse_mode == "mlp":
                 result = self.mlp(torch.cat(modality_features, dim=-1))
                 result = torch.concat([result, torch.cat(low_dim_features, dim=-1)], dim=1)
@@ -480,30 +484,60 @@ class TimmObsEncoderWithForce(ModuleAttrMixin):
                 result = torch.concat([result, torch.cat(low_dim_features, dim=-1)], dim=1)
 
         enc_dict["result"] = result
+        enc_dict["vision_feature"] = vision_feat
+        enc_dict["torque_feature"] = torque_feat
+        enc_dict["low_dim_feature"] = low_dim_feat
 
         return enc_dict
 
-    @torch.no_grad()
-    def output_shape(self):
+    def _example_obs_dict(self):
         example_obs_dict = dict()
-        obs_shape_meta = self.shape_meta['obs']
+        obs_shape_meta = self.shape_meta["obs"]
         sample_obs_shape_meta = self.shape_meta["sample"]["obs"]["sparse"]
+
         for key, attr in obs_shape_meta.items():
             type = attr.get("type", "low_dim")
             if type == "timestamp" or type == "index":
                 continue
 
-            shape = tuple(attr['shape'])
+            shape = tuple(attr["shape"])
             horizon = sample_obs_shape_meta[key]["horizon"]
+
             this_obs = torch.zeros(
-                (1, horizon) + shape, 
+                (1, horizon) + shape,
                 dtype=self.dtype,
-                device=self.device)
+                device=self.device,
+            )
             example_obs_dict[key] = this_obs
-        example_output = self.forward(example_obs_dict)["result"]
+
+        return example_obs_dict
+
+    @torch.no_grad()
+    def output_shape(self):
+        example_output = self.forward(self._example_obs_dict())["result"]
         assert len(example_output.shape) == 2
         assert example_output.shape[0] == 1
-        
+        return example_output.shape
+
+    @torch.no_grad()
+    def vision_output_shape(self):
+        example_output = self.forward(self._example_obs_dict())["vision_feature"]
+        assert len(example_output.shape) == 2
+        assert example_output.shape[0] == 1
+        return example_output.shape
+
+    @torch.no_grad()
+    def torque_output_shape(self):
+        example_output = self.forward(self._example_obs_dict())["torque_feature"]
+        assert len(example_output.shape) == 2
+        assert example_output.shape[0] == 1
+        return example_output.shape
+
+    @torch.no_grad()
+    def low_dim_output_shape(self):
+        example_output = self.forward(self._example_obs_dict())["low_dim_feature"]
+        assert len(example_output.shape) == 2
+        assert example_output.shape[0] == 1
         return example_output.shape
 
 

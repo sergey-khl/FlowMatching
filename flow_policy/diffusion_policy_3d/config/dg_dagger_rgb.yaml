@@ -16,7 +16,6 @@ n_action_steps: 64
 n_latency_steps: 0
 dataset_obs_steps: ${n_obs_steps}
 keypoint_visible_rate: 1.0
-obs_as_global_cond: True
 
 policy:
   _target_: diffusion_policy_3d.policy.dg_dagger_rgb.DgDaggerRGB
@@ -28,7 +27,6 @@ policy:
   weighted_loss: false
   batched_weights: false
   correction_thresh: 0.6 # repeated from task config.
-  scale_loss_weight: 1.0
 
   mlp_cfg:
     action_horizon: ${horizon}
@@ -51,7 +49,6 @@ policy:
   n_obs_steps: ${n_obs_steps}
 
   num_inference_steps: 10
-  obs_as_global_cond: true
   shape_meta: ${shape_meta}
 
   max_delay: 4
@@ -61,7 +58,7 @@ policy:
   obs_encoder:
     _target_: diffusion_policy_3d.model.vision.timm_obs_encoder_with_force.TimmObsEncoderWithForce
     shape_meta: ${shape_meta}
-    fuse_mode: modality-attention
+    fuse_mode: concat # dont mix vision torque or low dim data
     reduce_pretrained_lr: True
 
     base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_pandp-apple_base_2cam/checkpoints/wam_pandp-apple_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt

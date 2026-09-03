@@ -98,13 +98,11 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
         # resume training
         lastest_ckpt_path = self.get_checkpoint_path()
         
+        resumed = False
         if getattr(cfg.training, 'resume', False) and lastest_ckpt_path.is_file():
             cprint(f"Resuming training run from local checkpoint {lastest_ckpt_path}", "green")
             self.load_checkpoint(path=lastest_ckpt_path)
-        elif getattr(cfg.training, 'sirius_finetune', False):
-            # Load the checkpoint but NOT previous optimizer to tune with sirius.
-            pretrained_ckpt_path = pathlib.Path(cfg.training.finetune_checkpoint_path)
-            self.load_checkpoint(path=pretrained_ckpt_path, include_keys=[], exclude_keys=["optimizer"])
+            resumed = True
 
         # configure dataset
         dataset: BaseDataset
@@ -174,6 +172,13 @@ class TrainDgDaggerWorkspace(BaseWorkspace):
         if self.ema_model is not None:
             self.ema_model.to(device)
         optimizer_to(self.optimizer, device)
+
+        if not resumed:
+            null_err = self.model.solve_null_feature()
+            cprint(f"[GcrDagger] solved null feature, null residual mse={null_err:.6f}", "green")
+            if self.ema_model is not None:
+                with torch.no_grad():
+                    self.ema_model.null_feat.data.copy_(self.model.null_feat.data)
 
         # save batch for sampling
         train_sampling_batch = None
