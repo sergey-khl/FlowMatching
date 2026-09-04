@@ -34,7 +34,7 @@ shape_meta: &shape_meta
         # how long things take = (down_sample_steps * (horizon - 1))/hz
         state: # last 0.02s of low_dim
           horizon: 3
-          down_sample_steps: 5
+          down_sample_steps: 50
           source: low_dim
         ext_torque: # last 0.248s of low_dim
           horizon: 32
@@ -42,7 +42,7 @@ shape_meta: &shape_meta
           source: low_dim
         traj_weight: # last 0.02s. not used as part of obs. Should make this more later
           horizon: 3
-          down_sample_steps: 5
+          down_sample_steps: 50
           source: weight
         front_img: # just use 1 image
           horizon: 1

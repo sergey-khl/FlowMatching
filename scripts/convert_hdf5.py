@@ -160,7 +160,7 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
     expert_data_paths = ["/mnt/10tb/serg/datasets/wipe-board-corr-80/"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_wipe-board-80_corr-{IMPORTANCE_POWER}_delta-action.zarr"
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_wipe-board-80_corr-{IMPORTANCE_POWER}_abs-action.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -298,8 +298,8 @@ if __name__ == "__main__":
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
-                # jp_ds[j + 1],
-                residual,
+                jp_ds[j + 1], # maybe something funky
+                # residual,
                 # [gripper_action],
                 human_torque[j] # predicting ff so need the current torque
             ]).astype(np.float32)  # (7,)

@@ -9,6 +9,11 @@
 # bash scripts/train_policy.sh train_gcr_dagger gcr_dagger_rgb wam_wipe-board_gcr-dagger_2cam 0001 0 0
 # DG
 # bash scripts/train_policy.sh train_dg_dagger dg_dagger_rgb wam_pandp-apple_dg-dagger_2cam 0001 0 0
+# bash scripts/train_policy.sh train_dg_dagger dg_dagger_rgb wam_wipe-board_dg-dagger_2cam 0001 0 0
+#
+# NEXT STEPS:
+# check kernel for unet. test with kernel size 25
+# remove losses for gate / scale. test both
 
 # BEFORE RUNNING:
 # DONE: collect data at 500 hz or at least 128. base willl run at 1hz and res at 50

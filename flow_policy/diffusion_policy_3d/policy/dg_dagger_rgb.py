@@ -221,6 +221,7 @@ class DgDaggerRGB(BasePolicy):
         vision_unet_cond = torch.cat([vision_feat, low_dim_feat], dim=-1)
         gated_torque_feat = gate * torque_feat
         torque_unet_cond = torch.cat([gated_torque_feat, low_dim_feat], dim=-1)
+        print(f"GATE: {gate}")
         scale_cond = gate * full_feat + (1 - gate) * self.null_feat
 
         delta = 1.0 / self.num_inference_steps
@@ -488,7 +489,7 @@ class DgDaggerRGB(BasePolicy):
         valid_elements_count = loss_mask.sum().clamp_min(1.0)
         cfg_loss = cfg_loss.sum() / valid_elements_count
 
-        loss = cfg_loss + scale_loss + gate_loss
+        loss = cfg_loss + 0.1 * scale_loss + 0.1 * gate_loss
 
         loss_dict = {
             "cfg_loss": cfg_loss.item(),

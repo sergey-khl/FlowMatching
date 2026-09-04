@@ -43,7 +43,7 @@ policy:
   - 224
   - 224
   horizon: ${horizon}
-  kernel_size: 5
+  kernel_size: 25
   n_action_steps: ${n_action_steps}
   n_groups: 8
   n_obs_steps: ${n_obs_steps}

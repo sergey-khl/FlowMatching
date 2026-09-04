@@ -14,19 +14,21 @@ class RecorderReceiver:
         self.dof = dof
         self.recv_port = recv_port
 
-        # 13 DOF-length arrays:
+        # 17 DOF-length arrays:
         #   follower_jp, follower_jv, follower_dyngravcomp_torque,
         #   environment_torque, filtered_environment_torque,
         #   leader_jp, leader_jv, leader_dyngravcomp_torque,
         #   human_torque, filtered_human_torque,
         #   policyJp, policyJt, policyTorqueScale
+        #   resPolicyJp, resPolicyJt,
+        #   refPolicyTorque, refTorquePolicyJt
         # + follower(cart_pos 3 + quat 4) + leader(cart_pos 3 + quat 4)
         # + gripper_pos + gripper_vel + gripper_torque
         # 'Q'  = time_to_chunk_end (ns)
         # 'Q'  = res_time_to_chunk_end (ns)
-        # bytes: 880
+        # bytes: 1104
 
-        num_doubles = (13 * self.dof) + 17
+        num_doubles = (17 * self.dof) + 17
         self.fmt = f"<{num_doubles}dQQ"
         self.packet_size = struct.calcsize(self.fmt)
 
@@ -52,7 +54,7 @@ class RecorderReceiver:
     def _recv_loop(self):
         while not self._stop.is_set():
             try:
-                data, _ = self.sock_recv.recvfrom(1024)
+                data, _ = self.sock_recv.recvfrom(2048)
                 recv_ts_ns = time.time_ns()   # capture immediately on arrival
             except OSError:
                 break
@@ -99,15 +101,19 @@ class RecorderReceiver:
         idx_policy_jp = dof * 10
         idx_policy_jt = dof * 11
         idx_policy_torque_scale = dof * 12
-        idx_follower_cart_pos = dof * 13
-        idx_follower_quat = dof * 13 + 3
-        idx_leader_cart_pos = dof * 13 + 7
-        idx_leader_quat = dof * 13 + 10
-        idx_gripper_pos = dof * 13 + 14
-        idx_gripper_vel = dof * 13 + 15
-        idx_gripper_torque = dof * 13 + 16
-        idx_time_to_chunk_end = dof * 13 + 17
-        idx_res_time_to_chunk_end = dof * 13 + 18
+        idx_res_policy_jp = dof * 13
+        idx_res_policy_jt = dof * 14
+        idx_ref_policy_torque = dof * 15
+        idx_ref_torque_policy_jt = dof * 16
+        idx_follower_cart_pos = dof * 17
+        idx_follower_quat = dof * 17 + 3
+        idx_leader_cart_pos = dof * 17 + 7
+        idx_leader_quat = dof * 17 + 10
+        idx_gripper_pos = dof * 17 + 14
+        idx_gripper_vel = dof * 17 + 15
+        idx_gripper_torque = dof * 17 + 16
+        idx_time_to_chunk_end = dof * 17 + 17
+        idx_res_time_to_chunk_end = dof * 17 + 18
 
         return {
             "follower_jp": list(unpacked[idx_follower_jp:idx_follower_jv]),
@@ -122,7 +128,11 @@ class RecorderReceiver:
             "filtered_human_torque": list(unpacked[idx_filtered_human_torque:idx_policy_jp]),
             "policy_jp": list(unpacked[idx_policy_jp:idx_policy_jt]),
             "policy_jt": list(unpacked[idx_policy_jt:idx_policy_torque_scale]),
-            "policy_torque_scale": list(unpacked[idx_policy_torque_scale:idx_follower_cart_pos]),
+            "policy_torque_scale": list(unpacked[idx_policy_torque_scale:idx_res_policy_jp]),
+            "res_policy_jp": list(unpacked[idx_res_policy_jp:idx_res_policy_jt]),
+            "res_policy_jt": list(unpacked[idx_res_policy_jt:idx_ref_policy_torque]),
+            "ref_policy_torque": list(unpacked[idx_ref_policy_torque:idx_ref_torque_policy_jt]),
+            "ref_torque_policy_jt": list(unpacked[idx_ref_torque_policy_jt:idx_follower_cart_pos]),
             "follower_cart_pos": list(unpacked[idx_follower_cart_pos:idx_follower_quat]),
             "follower_quat_wxyz": list(unpacked[idx_follower_quat:idx_leader_cart_pos]),
             "leader_cart_pos": list(unpacked[idx_leader_cart_pos:idx_leader_quat]),
@@ -134,6 +144,7 @@ class RecorderReceiver:
             "res_time_to_chunk_end_ns": unpacked[idx_res_time_to_chunk_end],
             "timestamp_ns": recv_ts_ns, # C++ clock is not compatible with the way we should be using timestamps
         }
+
 
     def close(self):
         if self.sock_recv:
