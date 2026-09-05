@@ -55,7 +55,7 @@ shape_meta: &shape_meta
     action:
       sparse:
         horizon: ${horizon}
-        down_sample_steps: 10
+        down_sample_steps: 50
 
 env_runner:
   _target_: diffusion_policy_3d.env_runner.dg_udp_runner.DgUdpRunner

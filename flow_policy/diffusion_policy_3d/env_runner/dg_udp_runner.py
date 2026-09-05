@@ -70,7 +70,7 @@ class DgUdpRunner(BaseRunner):
         self.send_interval = 0.4  # after sending dont do anythign for at least this amount of time
         self.last_send_time = 0.0
 
-        self.inference_time = 0.1          # estimate of how long inf takes
+        self.inference_time = 0.17          # estimate of how long inf takes
         self.inference_time_alpha = 0.2    # EMA smoothing factor for the estimate
         self.inf_buffer = 0.0 # little buffer to account for extra latencies like communication
 

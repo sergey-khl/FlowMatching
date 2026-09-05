@@ -221,6 +221,7 @@ class DgDaggerRGB(BasePolicy):
         vision_unet_cond = torch.cat([vision_feat, low_dim_feat], dim=-1)
         gated_torque_feat = gate * torque_feat
         torque_unet_cond = torch.cat([gated_torque_feat, low_dim_feat], dim=-1)
+        # gate[0][0] = 0
         print(f"GATE: {gate}")
         scale_cond = gate * full_feat + (1 - gate) * self.null_feat
 
