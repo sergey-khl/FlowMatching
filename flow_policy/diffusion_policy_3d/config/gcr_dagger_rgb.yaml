@@ -235,7 +235,8 @@ training:
   tqdm_interval_sec: 1.0
   save_video: True
   # base_cr_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_pandp-apple_cr-dagger_2cam-cr_dagger_rgb-0002_seed0/checkpoints/wam_pandp-apple_cr-dagger_2cam-epoch=0300-test_mean_score=-0.007.ckpt
-  base_cr_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_wipe-board_cr-dagger_2cam-cr_dagger_rgb-0002_seed0/checkpoints/
+  # base_cr_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_wipe-board_cr-dagger_2cam-cr_dagger_rgb-0002_seed0/checkpoints/
+  base_cr_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_build-lego_cr-dagger_2cam-cr_dagger_rgb-0001_seed0/checkpoints/wam_build-lego_cr-dagger_2cam-epoch=0300-test_mean_score=-0.006.ckpt
 
 logging:
   group: ${exp_name}

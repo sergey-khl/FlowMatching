@@ -2,6 +2,7 @@
 # bash scripts/eval_policy.sh eval_flow_matching rtc_flow_match_rgb wam_wipe-board_base_2cam 0001 0 0
 # bash scripts/eval_policy.sh eval_flow_matching rtc_flow_match_rgb wam_build-lego_base_2cam 0001 0 0
 # bash scripts/eval_policy.sh eval_cr_dagger cr_dagger_rgb wam_pandp-apple_cr-dagger_2cam 0001 0 0
+# bash scripts/eval_policy.sh eval_cr_dagger cr_dagger_rgb wam_build-lego_cr-dagger_2cam 0001 0 0
 # bash scripts/eval_policy.sh eval_gcr_dagger gcr_dagger_rgb wam_pandp-apple_gcr-dagger_2cam 0001 0 0
 # bash scripts/eval_policy.sh eval_dg_dagger dg_dagger_rgb wam_pandp-apple_dg-dagger_2cam 0001 0 0
 
