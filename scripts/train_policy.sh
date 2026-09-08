@@ -5,6 +5,7 @@
 # CR
 # bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_pandp-apple_cr-dagger_2cam 0001 0 0
 # bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_wipe-board_cr-dagger_2cam 0001 0 0
+# bash scripts/train_policy.sh train_cr_dagger cr_dagger_rgb wam_build-lego_cr-dagger_2cam 0001 0 0
 # GCR
 # bash scripts/train_policy.sh train_gcr_dagger gcr_dagger_rgb wam_pandp-apple_gcr-dagger_2cam 0001 0 0
 # bash scripts/train_policy.sh train_gcr_dagger gcr_dagger_rgb wam_wipe-board_gcr-dagger_2cam 0001 0 0 DG bash scripts/train_policy.sh train_dg_dagger dg_dagger_rgb wam_pandp-apple_dg-dagger_2cam 0001 0 0

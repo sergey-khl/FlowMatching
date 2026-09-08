@@ -47,7 +47,8 @@ policy:
     reduce_pretrained_lr: True
 
     # base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_pandp-apple_base_2cam/checkpoints/wam_pandp-apple_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
-    base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_wipe-board_base_2cam/checkpoints/wam_wipe-board_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
+    # base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_wipe-board_base_2cam/checkpoints/wam_wipe-board_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
+    base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_build-lego_base_2cam-rtc_flow_match_rgb-0001_seed0/checkpoints/wam_build-lego_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
 
     ##### from scratch #####
     # model_name: 'vit_base_patch16_224'
@@ -132,10 +133,10 @@ base_policy:
   - 256
   - 512
   crop_shape:
-  # - 224
-  # - 224
-  - 80
-  - 80
+  - 224
+  - 224
+  # - 80
+  # - 80
   horizon: 16
   kernel_size: 5
   n_action_steps: 8

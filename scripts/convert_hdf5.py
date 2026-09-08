@@ -159,8 +159,8 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp-apple-corr-41/"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-41_corr-{IMPORTANCE_POWER}_delta-action.zarr"
+    expert_data_paths = ["/mnt/10tb/serg/datasets/build-lego-corr-51/"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_build-lego-51_corr-{IMPORTANCE_POWER}_delta-action.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -297,13 +297,13 @@ if __name__ == "__main__":
                 jp_ds[j],
                 cart_pos_ds[j],
                 rotmats_ds[j],
-                [gripper_pos_ds[j]],
+                # [gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
                 # jp_ds[j + 1], # maybe something funky
                 residual,
-                [gripper_action],
+                # [gripper_action],
                 environment_torque[j] # predicting ff so need the current torque
             ]).astype(np.float32)  # (7,)
  
