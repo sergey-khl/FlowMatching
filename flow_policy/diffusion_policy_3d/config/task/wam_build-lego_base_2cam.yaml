@@ -1,6 +1,6 @@
-name: wam_plug-asus_base_1cam
+name: wam_build-lego_base_2cam
 
-task_name: wam_plug-asus_base_1cam
+task_name: wam_build-lego_base_2cam
 
 image_shape: &image_shape [3, 224, 224]
 
@@ -12,6 +12,9 @@ shape_meta: &shape_meta
     front_img:
         shape: *image_shape
         type: rgb
+    wrist_img:
+        shape: *image_shape
+        type: rgb
     state:
       shape: [16] # [...7dofjp, ...ee pos, ...2x3 rows of rotation matrix]
       type: low_dim
@@ -19,7 +22,7 @@ shape_meta: &shape_meta
     shape: [7]
   sample:
     # (ms) time held free at the end of each episode so every sparse query still has room for its full action horizon.
-    training_duration_per_sparse_query: 4000
+    training_duration_per_sparse_query: 2000
     obs:
       sparse:
         # down_sample_steps: how many raw steps to skip in that key's own channel
@@ -33,6 +36,10 @@ shape_meta: &shape_meta
         front_img: # just use 1 image
           horizon: 1
           down_sample_steps: 1 # NOTE: this will likely have to change if horizon is not 1
+          source: img
+        wrist_img:
+          horizon: 1
+          down_sample_steps: 1
           source: img
     action:
       sparse:
@@ -48,18 +55,19 @@ env_runner:
   wrist_cam_serial: "18475182"
   front_cam_serial: "18475176"
   dof: 7
-  loop_hz: 10
+  loop_hz: 500
   debug: False
   shape_meta: *shape_meta
   n_action_steps: ${n_action_steps}
+  action_size: 7
 
 # down_sample_steps: how many steps to skip in the raw data for the given usage
 # horizon: how many steps to look ahead(action) or back(obs) after downsample for the given usage
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_async_dataset.LabRealAsyncDataset
-  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_plug-asus-81_nocorr-1.zarr
+  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_build-lego-53_nocorr-1.zarr
   shape_meta: *shape_meta
-  action_padding: False
+  action_padding: True
   query_frequency_down_sample_steps: 1 # paper has this as 8 but we do our own downsampling in the data conversion script
   correction_upsampling:
     enabled: False

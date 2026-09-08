@@ -127,7 +127,8 @@ class Recorder:
 
     def _gather_raw_low_dim(self, key, raw_ids):
         if key == "ext_torque":
-            key = "filtered_human_torque"
+            # key = "filtered_human_torque"
+            key = "filtered_environment_torque"
         elif key == "policy_cmd":
             key = "policy_jp"
         data = np.asarray(self.low_dim_data[key], dtype=np.float32)
@@ -143,7 +144,7 @@ class Recorder:
                 leader_jp[i],
                 leader_cart_pos[i],
                 self._quat_to_rotmat(leader_quat[i]),
-                [gripper_pos[i]],
+                # [gripper_pos[i]],
             ]).astype(np.float32)
             for i in raw_ids
         ]
@@ -239,8 +240,8 @@ class Recorder:
             if source == "low_dim":
                 if key == "state":
                     # 7 (jp) + 3 (cart_pos) + 6 (rotmat) + 1 (gripper) = 17
-                    shape = (1, horizon, 17)
-                elif key in ["leader_jp", "policy_cmd", "filtered_human_torque", "ext_torque"]:
+                    shape = (1, horizon, 16)
+                elif key in ["leader_jp", "policy_cmd", "filtered_human_torque", "filtered_environment_torque", "ext_torque"]:
                     shape = (1, horizon, 7)
             elif source == "weight":
                 continue

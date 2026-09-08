@@ -8,7 +8,7 @@ shape_meta: ${task.shape_meta}
 base_shape_meta: ${task.base_shape_meta}
 exp_name: "debug"
 
-output_dir: /mnt/10tb/serg/FlowMatching/outputs/${name}_${task_name}
+output_dir: ???
 
 horizon: 5
 n_obs_steps: 1
@@ -233,8 +233,8 @@ training:
   max_val_steps: null
   tqdm_interval_sec: 1.0
   save_video: True
-  # base_cr_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_cr_dagger_wam_pandp-apple_cr-dagger_2cam/checkpoints/wam_pandp-apple_cr-dagger_2cam-epoch=0300-test_mean_score=-0.004.ckpt
-  base_cr_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_cr_dagger_wam_wipe-board_cr-dagger_2cam/checkpoints/wam_wipe-board_cr-dagger_2cam-epoch=0300-test_mean_score=-0.005.ckpt
+  # base_cr_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_pandp-apple_cr-dagger_2cam-cr_dagger_rgb-0002_seed0/checkpoints/wam_pandp-apple_cr-dagger_2cam-epoch=0300-test_mean_score=-0.007.ckpt
+  base_cr_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_wipe-board_cr-dagger_2cam-cr_dagger_rgb-0002_seed0/checkpoints/
 
 logging:
   group: ${exp_name}

@@ -159,8 +159,8 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/wipe-board-corr-80/"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_wipe-board-80_corr-{IMPORTANCE_POWER}_abs-action.zarr"
+    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp-apple-corr-41/"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-41_corr-{IMPORTANCE_POWER}_delta-action.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -190,6 +190,7 @@ if __name__ == "__main__":
     point_cloud_arrays = []
     depth_arrays = []
     human_torque_arrays = []
+    environment_torque_arrays = []
     traj_weight_arrays = []
 
     if os.path.exists(save_data_path):
@@ -234,6 +235,7 @@ if __name__ == "__main__":
         policy_torque_scale = low_dim["policy_torque_scale"][:] # (N, 7)
         policy_cmd = low_dim["policy_jp"][:] # (N, 7)
         human_torque = low_dim["filtered_human_torque"][:]        # (N, 4) w,x,y,z
+        environment_torque = low_dim["filtered_environment_torque"][:]        # (N, 4) w,x,y,z
 
         idxs = downsample_by_timestamp(timestamps_ns, TARGET_DT_NS)
 
@@ -244,6 +246,7 @@ if __name__ == "__main__":
         policy_torque_scale_ds = policy_torque_scale[idxs]
         policy_cmd_ds = policy_cmd[idxs]
         human_torque_ds = human_torque[idxs]
+        environment_torque_ds = environment_torque[idxs]
         robot_timestamp_ds = timestamps_ns[idxs]
 
         # rotvec_ds = quats_to_rotvec(cart_rot_ds)
@@ -294,14 +297,14 @@ if __name__ == "__main__":
                 jp_ds[j],
                 cart_pos_ds[j],
                 rotmats_ds[j],
-                # [gripper_pos_ds[j]],
+                [gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
-                jp_ds[j + 1], # maybe something funky
-                # residual,
-                # [gripper_action],
-                human_torque[j] # predicting ff so need the current torque
+                # jp_ds[j + 1], # maybe something funky
+                residual,
+                [gripper_action],
+                environment_torque[j] # predicting ff so need the current torque
             ]).astype(np.float32)  # (7,)
  
             if has_weights:
@@ -314,6 +317,7 @@ if __name__ == "__main__":
             state_arrays.append(state)
             action_arrays.append(action)
             human_torque_arrays.append(human_torque_ds[j])
+            environment_torque_arrays.append(environment_torque_ds[j])
             robot_timestamp_arrays.append(robot_timestamp_ds[j])
  
             prev_gripper_action = gripper_action
@@ -323,11 +327,12 @@ if __name__ == "__main__":
             ep_state = np.stack(state_arrays, axis=0)
             ep_action = np.stack(action_arrays, axis=0)
             ep_human_torque = np.stack(human_torque_arrays, axis=0)
+            ep_environment_torque = np.stack(environment_torque_arrays, axis=0)
             ep_robot_ts = np.array(robot_timestamp_arrays, dtype=np.int64)
 
             append_ds(low_dim_data, "state", ep_state, (CHUNK_SIZE, ep_state.shape[1]), "float32")
             append_ds(low_dim_data, "action", ep_action, (CHUNK_SIZE, ep_action.shape[1]), "float32")
-            append_ds(low_dim_data, "ext_torque", ep_human_torque, (CHUNK_SIZE, 7), "float32")
+            append_ds(low_dim_data, "ext_torque", ep_environment_torque, (CHUNK_SIZE, 7), "float32")
             append_ds(low_dim_data, "robot_timestamp_ns", ep_robot_ts, (CHUNK_SIZE,), "int64")
 
             if has_policy:
@@ -344,7 +349,7 @@ if __name__ == "__main__":
 
             # reset per-episode lists so they don't accumulate across episodes
             state_arrays, action_arrays = [], []
-            human_torque_arrays, robot_timestamp_arrays = [], []
+            human_torque_arrays, environment_torque_arrays, robot_timestamp_arrays = [], [], []
             policy_cmd_arrays = []
  
         # NOTE: noop does not work with the sepeartion of the images

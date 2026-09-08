@@ -9,7 +9,7 @@ shape_meta: ${task.shape_meta}
 base_shape_meta: ${task.base_shape_meta}
 exp_name: "debug"
 
-output_dir: /mnt/10tb/serg/FlowMatching/outputs/${name}_${task_name}
+output_dir: ???
 
 horizon: 5
 n_obs_steps: 1
@@ -46,8 +46,8 @@ policy:
     fuse_mode: modality-attention
     reduce_pretrained_lr: True
 
-    base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_pandp-apple_base_2cam/checkpoints/wam_pandp-apple_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
-    # base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_wipe-board_base_2cam/checkpoints/wam_wipe-board_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
+    # base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_pandp-apple_base_2cam/checkpoints/wam_pandp-apple_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
+    base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_wipe-board_base_2cam/checkpoints/wam_wipe-board_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
 
     ##### from scratch #####
     # model_name: 'vit_base_patch16_224'

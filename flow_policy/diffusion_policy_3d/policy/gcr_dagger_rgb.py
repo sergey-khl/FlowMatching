@@ -165,6 +165,8 @@ class GcrDaggerRGB(BasePolicy):
         gate = torch.sigmoid(self.gate(global_cond)).reshape(B, 1)
         feat = gate * global_cond + (1.0 - gate) * self.null_feat
         nsample = self.residual(feat)
+
+        print(f"GATE: {gate}")
         
         naction_pred = nsample[..., :Da]
         action_pred = self.normalizer["action"].unnormalize(naction_pred)

@@ -8,7 +8,7 @@ task_name: ${task.name}
 shape_meta: ${task.shape_meta}
 exp_name: "debug"
 
-output_dir: /mnt/10tb/serg/FlowMatching/outputs/${name}_${task_name}
+output_dir: ???
 
 horizon: 16
 n_obs_steps: 1
@@ -169,10 +169,10 @@ training:
   resume: True
   lr_scheduler: cosine
   lr_warmup_steps: 500
-  num_epochs: 501
+  num_epochs: 5001
   gradient_accumulate_every: 1
   use_ema: True
-  rollout_every: 600
+  rollout_every: 30000
   checkpoint_every: 50
   val_every: 100
   sample_every: 5

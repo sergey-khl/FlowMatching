@@ -1,3 +1,4 @@
+SEP 2 2026:
 
   # used by base, cr dagger base component and dg dagger
   base:
@@ -28,12 +29,66 @@
     integrator_limit: [0, 0, 0, 0, 0, 0, 0]
 
 
-sep 2 2026
-
-
 apple:
     9/12 ID . 3/12 OOD
 
     base: 5/12
     cr: 6/12
     gcr: 7/12
+
+*********************************
+
+SEP 7 2026
+
+  # used by base, cr dagger base component and dg dagger
+  base:
+    kp: [140.0, 140.0, 120.0, 120.0, 5.0, 5.0, 5.0]
+    ki: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    kd: [3.0, 3.0, 1.5, 0.8, 0.05, 0.05, 0.05]
+    control_signal_limit: [8, 8, 5.0, 5.0, 0.9, 0.9, 0.5]
+    integrator_limit: [0, 0, 0, 0, 0, 0, 0]
+
+  # =============================================================
+
+  # for the delta jp part of cr dagger
+  res:
+    kp: [100.0, 70.0, 60.0, 60.0, 3.0, 3.0, 3.0]
+    ki: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    kd: [1.5, 1.5, 1.0, 0.5, 0.05, 0.05, 0.03]
+    control_signal_limit: [5, 4, 3, 2.0, 0.5, 0.5, 0.3]
+    integrator_limit: [0, 0, 0, 0, 0, 0, 0]
+
+  # =============================================================
+
+  # for the torque parts of cr dagger and dg dagger
+  torque:
+    kp: [0.5, 0.5, 0.5, 0.5, 0.0, 0.0, 0.0]
+    ki: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    kd: [0.001, 0.001, 0.001, 0.001, 0.0, 0.0, 0.0]
+    control_signal_limit: [5, 5, 5.0, 5.0, 0.0, 0.0, 0.0]
+    integrator_limit: [0, 0, 0, 0, 0, 0, 0]
+
+all in distriubtion of base policy
+
+apple:
+    12
+
+    base: ID: 5/12
+    cr: 8/12
+    gcr: 12/12
+
+board:
+    12
+
+    base: ID: 1/12
+    cr: 5/12
+    gcr: 10/12
+
+dog:
+    12
+
+    base: 1/12
+    cr: ??
+    gcr: ??
+
+
