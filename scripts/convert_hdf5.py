@@ -1,5 +1,6 @@
 import os
 import re
+import random
 
 import h5py
 import numpy as np
@@ -30,6 +31,9 @@ TARGET_DT_NS = int(1e9 / TARGET_FPS)  # 100_000_000 ns
 
 IMG_TARGET_FPS = 30
 IMG_TARGET_DT_NS = int(1e9 / IMG_TARGET_FPS)  # 100_000_000 ns
+
+STRATEGY = 1  # 0 for gcr and 1 or 2 for cr
+CORRECTION_THRESH = 0.3
 
 def find_nearest_index(timestamps, target_time):
     """Return index of the timestamp closest to target_time."""
@@ -159,8 +163,8 @@ if __name__ == "__main__":
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_no_dmp2"]
     # expert_data_paths = ["/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp", "/home/serg/projects/wam-ros-docker/wam_ws/src/wam_haptic_dmps/pandp_dmp2"]
     # expert_data_paths = ["/mnt/10tb/serg/datasets/pandp_dmp2"]
-    expert_data_paths = ["/mnt/10tb/serg/datasets/build-lego-corr-51/"]
-    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_build-lego-51_corr-{IMPORTANCE_POWER}_delta-action.zarr"
+    expert_data_paths = ["/mnt/10tb/serg/datasets/pandp-apple-corr-41/"]
+    save_data_path = f"/mnt/10tb/serg/FlowMatching/data_wam/wam_pandp-apple-41_corr-{IMPORTANCE_POWER}_strat-{STRATEGY}.zarr"
 
     dirs = []
     for path in expert_data_paths:
@@ -171,6 +175,9 @@ if __name__ == "__main__":
         )
         dirs.extend([(path, f) for f in files])
 
+    total_episodes = len(dirs)
+    strategy_2_eps = set(random.sample(range(total_episodes), min(15, total_episodes))) if STRATEGY == 2 else set()
+    
     # raw robot data
     total_count = 0
     state_arrays = []
@@ -288,6 +295,13 @@ if __name__ == "__main__":
             # delta_jp = jp_ds[j + 1] - jp_ds[j]
             residual = jp_ds[j] - policy_cmd_ds[j]
             gripper_action = gripper_action_ds[j + 1]
+
+            if STRATEGY == 1 and has_weights:
+                # doesent take into account importance power but fine for the current paper
+                current_weight = np.sum(inverted_torques[j], axis=0) * (len(idxs) / weight_sum)
+                if current_weight < CORRECTION_THRESH:
+                    residual = np.zeros_like(residual)
+                    environment_torque[j] = np.zeros_like(environment_torque[j])
  
             # if is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
             #     noop_count += 1
@@ -297,13 +311,13 @@ if __name__ == "__main__":
                 jp_ds[j],
                 cart_pos_ds[j],
                 rotmats_ds[j],
-                # [gripper_pos_ds[j]],
+                [gripper_pos_ds[j]],
             ]).astype(np.float32)  # (8,)
  
             action = np.concatenate([
                 # jp_ds[j + 1], # maybe something funky
                 residual,
-                # [gripper_action],
+                [gripper_action],
                 environment_torque[j] # predicting ff so need the current torque
             ]).astype(np.float32)  # (7,)
  
@@ -345,6 +359,10 @@ if __name__ == "__main__":
                 spread = episode_weights ** IMPORTANCE_POWER
                 episode_weights = spread * (total / spread.sum())
                 ep_weights = episode_weights.astype(np.float32)
+
+                if STRATEGY == 2 and i in strategy_2_eps:
+                    ep_weights[:] = CORRECTION_THRESH
+
                 append_ds(low_dim_data, "traj_weight", ep_weights, (CHUNK_SIZE,), "float32")
 
             # reset per-episode lists so they don't accumulate across episodes

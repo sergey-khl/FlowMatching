@@ -125,7 +125,7 @@ env_runner:
 
 dataset:
   _target_: diffusion_policy_3d.dataset.lab_real_async_dataset.LabRealAsyncDataset
-  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_wipe-board-80_corr-1_delta-action.zarr
+  zarr_path: /mnt/10tb/serg/FlowMatching/data_wam/wam_wipe-board-80_corr-1_strat-2.zarr
   shape_meta: *shape_meta
   action_padding: False
   query_frequency_down_sample_steps: 1 # paper has this as 8 but we do our own downsampling in the data conversion script
@@ -136,7 +136,7 @@ dataset:
     lookback_down_sample_steps: 1
     weighted_sampling: 4          # duplicate each correction point this many times
     correction_horizon: 10          # + extra query points
-    only_correction: True
+    only_correction: True # strat 2
   seed: 42
   val_ratio: 0.0
   max_train_episodes: 90
