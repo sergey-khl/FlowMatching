@@ -49,6 +49,7 @@ policy:
     base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_pandp-apple_base_2cam/checkpoints/wam_pandp-apple_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
     # base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/train_rtc_flowmatch_wam_wipe-board_base_2cam/checkpoints/wam_wipe-board_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
     # base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_build-lego_base_2cam-rtc_flow_match_rgb-0001_seed0/checkpoints/wam_build-lego_base_2cam-epoch=0300-test_mean_score=-0.014.ckpt
+    # base_policy_ckpt: /mnt/10tb/serg/FlowMatching/outputs/wam_transfer-bag_base_2cam-rtc_flow_match_rgb-0001_seed0/checkpoints/wam_transfer-bag_base_2cam-epoch=0300-test_mean_score=-0.010.ckpt
 
     ##### from scratch #####
     # model_name: 'vit_base_patch16_224'

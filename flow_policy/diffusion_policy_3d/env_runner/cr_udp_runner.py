@@ -84,6 +84,8 @@ class CrUdpRunner(BaseRunner):
         self.res_inference_time = 0.01          # estimate of how long inf takes
         self.inf_buffer = 0.0 # little buffer to account for extra latencies like communication
 
+        self.look_ahead_time = 0.0 # this addressses the second fix on page 4 of the corrected crdagger paper
+
         self._base_infer_request_q = queue.Queue(maxsize=1)   # pending obs
         self._base_infer_result_q = queue.Queue(maxsize=1)    # pending action
         self._base_inference_busy = threading.Event()          # set while worker is actually running predict_action
@@ -448,7 +450,7 @@ class CrUdpRunner(BaseRunner):
                         #
                         # print(f"res took {self.res_inference_time}")
                         # print(f"res skipping {res_time_to_chunk_end_s}")
-                        res_time_to_skip_ns = time_to_skip_ns + int(self.inf_buffer * 1e9)
+                        res_time_to_skip_ns = time_to_skip_ns + int(self.inf_buffer * 1e9) + int(self.look_ahead_time * 1e9)
                         print(f"res skipping {res_time_to_skip_ns / 1e9}")
                         self.res_follower_sender.send_action_chunk(action_chunk, res_time_to_skip_ns)
                         self.res_leader_sender.send_action_chunk(action_chunk, res_time_to_skip_ns)

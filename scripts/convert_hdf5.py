@@ -301,7 +301,6 @@ if __name__ == "__main__":
                 current_weight = np.sum(inverted_torques[j], axis=0) * (len(idxs) / weight_sum)
                 if current_weight < CORRECTION_THRESH:
                     residual = np.zeros_like(residual)
-                    environment_torque[j] = np.zeros_like(environment_torque[j])
  
             # if is_noop(delta_pos, delta_rot, gripper_action, prev_gripper_action):
             #     noop_count += 1
