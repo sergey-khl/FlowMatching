@@ -30,7 +30,7 @@ The following guidance works well for a machine with 3090/A40/A800/A100 GPU, cud
 
 ```
 sudo apt-get update
-sudo apt-get install pkg-config libhdf5-dev python3-dev build-essential
+sudo apt-get install pkg-config libhdf5-dev python3-dev build-essential libxml2-dev libxslt1-dev
 
 then cd flow_policy && pip install -e . && cd .. 
 
