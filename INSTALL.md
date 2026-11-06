@@ -1,12 +1,7 @@
+
 # Installing Conda Environment from Zero to Hero
 
 The following guidance works well for a machine with 3090/A40/A800/A100 GPU, cuda 11.7, driver 515.65.01.
-
-First, git clone this repo and `cd` into it.
-
-    git clone https://github.com/YanjieZe/3D-Diffusion-Policy.git
-
-
 **Please strictly follow the guidance to avoid any potential errors. Especially, make sure Gym version is the same.**
 
 **Don't worry about the gym version now. Just install my version in `third_party/gym-0.21.0` and you will be fine.**
@@ -33,8 +28,11 @@ First, git clone this repo and `cd` into it.
 
 3.install dp3
 
-    cd 3D-Diffusion-Policy && pip install -e . && cd ..
+```
+sudo apt-get update
+sudo apt-get install pkg-config libhdf5-dev python3-dev build-essential
 
+then cd flow_policy && pip install -e . && cd .. 
 
 ---
 
